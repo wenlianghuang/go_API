@@ -45,9 +45,17 @@ func (s *Server) mountRoutes() {
 		// 掛載中間件
 		r.Use(s.AuthMiddleware)
 
-		// 這些 API 現在受到保護了
+		// User 相關路由
 		r.Get("/users", s.HandleListUsers)    // 只有管理員能看列表
 		r.Get("/users/{id}", s.HandleGetUser) // 只有管理員能查詳情
 		r.Get("/me", s.HandleMe)              // 測試 Context 注入用
+
+		// Device 相關路由（所有端點都需要認證）
+		r.Post("/devices", s.HandleCreateDevice)
+		r.Get("/devices", s.HandleListDevices)
+		r.Get("/devices/{id}", s.HandleGetDevice)
+
+		// Telemetry 相關路由（需要認證）
+		r.Post("/telemetries", s.HandleCreateTelemetry)
 	})
 }

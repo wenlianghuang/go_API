@@ -2,6 +2,7 @@ package store
 
 import (
 	"fmt"
+	"my-api/model"
 	"sync"
 	"time"
 )
@@ -16,9 +17,18 @@ type User struct {
 
 // Storage 定義了資料庫的行為 (Interface)，這是為了以後可以隨時換成 Postgres/MySQL
 type Storage interface {
-	Create(User) error
-	Get(string) (User, error)
+	// User 相關
+	Create(u User) error
+	Get(id string) (User, error)
 	List() ([]User, error)
+
+	// 設備相關
+	CreateDevice(dev *model.Device) error
+	GetDeviceByID(id uint) (*model.Device, error)
+	ListDevices() ([]model.Device, error)
+
+	// 數據相關 (這裡先定義一個簡單的)
+	AddTelemetry(data *model.Telemetry) error
 }
 
 // MemoryStore 是 Storage 的一個實作 (存在記憶體中)

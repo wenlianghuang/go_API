@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"my-api/api"
+	"my-api/model"
 	"my-api/store"
 )
 
@@ -30,6 +31,12 @@ func (m *MockStore) Create(u store.User) error {
 // 實作其他方法以滿足介面 (雖然這次測試用不到)
 func (m *MockStore) Get(id string) (store.User, error) { return store.User{}, nil }
 func (m *MockStore) List() ([]store.User, error)       { return nil, nil }
+
+// 實作 Storage 介面的設備相關方法
+func (m *MockStore) CreateDevice(dev *model.Device) error         { return nil }
+func (m *MockStore) GetDeviceByID(id uint) (*model.Device, error) { return nil, nil }
+func (m *MockStore) ListDevices() ([]model.Device, error)         { return nil, nil }
+func (m *MockStore) AddTelemetry(data *model.Telemetry) error     { return nil }
 
 func TestHandleCreateUser(t *testing.T) {
 	// 定義測試表格 (Table)
