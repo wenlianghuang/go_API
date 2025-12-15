@@ -1,0 +1,69 @@
+name: Go Continuous Integration
+
+# 1. 觸發條件：在 push 或 pull_request 到任何分支時觸發
+on:
+  push:
+    branches: [ "*" ] # 針對所有分支
+  pull_request:
+    branches: [ "main" ] # 針對拉取請求，目標為 main 分支
+
+# 2. 定義任務 (Job)
+jobs:
+  test-and-build:
+    name: Test & Build on Go ${{ matrix.go-version }}
+    
+    # 使用矩陣策略，在多個 Go 版本和作業系統上運行
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        go-version: [ '1.20', '1.21', '1.22' ] # 您可以根據需求修改版本
+        # 也可以加入不同的 OS： os: [ubuntu-latest, windows-latest]
+        
+    # 3. 執行步驟 (Steps)
+    steps:
+    
+      # Step 1: 檢出程式碼 (必須)
+      - name: Checkout code
+        uses: actions/checkout@v4
+        
+      # Step 2: 設定 Go 環境 (使用矩陣中的版本)
+      - name: Setup Go ${{ matrix.go-version }}
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ matrix.go-version }}
+          cache: true # 啟用快取機制以加速 Go Module 下載
+          
+      # Step 3: 下載 Go Modules 依賴
+      - name: Download Go modules
+        run: go mod tidy
+        
+      # Step 4: 執行程式碼風格檢查 (go fmt)
+      # 確保所有程式碼都符合 Go 官方的格式規範
+      - name: Check code format (go fmt)
+        run: test -z "$(gofmt -l .)"
+        
+      # Step 5: 執行靜態分析/Lint (建議使用)
+      # 這裡以 go vet 為例，更進階可以考慮使用 golangci-lint
+      - name: Run go vet
+        run: go vet ./...
+        
+      # Step 6: 執行單元測試和覆蓋率 (Unit Tests & Coverage)
+      # -coverprofile: 產生測試覆蓋率報告 (通常用於上傳到 Codecov 或 SonarQube)
+      - name: Run tests
+        run: go test -v -race -coverprofile=coverage.txt ./...
+        
+      # Step 7: 建構 Go 應用程式 (生成可執行檔案)
+      # 這一步產生了 CI 的成品 (Artifacts)
+      - name: Build application
+        run: go build -v ./...
+        
+      # Step 8: 上傳建構成品 (Artifact)
+      # 可選步驟，但建議將建構好的二進制檔保存下來，供 CD 階段使用
+      - name: Upload Build Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: go-app-binary-${{ matrix.go-version }}
+          # 假設您的專案根目錄下會產生一個名為 app 的可執行文件
+          path: |
+            ./app 
+            # 如果您有多個模組或建構結果，請調整路徑
