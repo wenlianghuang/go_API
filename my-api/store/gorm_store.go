@@ -78,3 +78,16 @@ func (s *GormStore) List() ([]User, error) {
 	result := s.db.Find(&users)
 	return users, result.Error
 }
+
+// DeleteDeviceWithAllData 刪除設備及其所有遙測數據 (原子性操作)
+func (s *GormStore) DeleteDeviceWithAllData(id uint) error {
+	return s.db.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Delete(&model.Telemetry{}, "device_id = ?", id).Error; err != nil {
+			return err
+		}
+		if err := tx.Delete(&model.Device{}, id).Error; err != nil {
+			return err
+		}
+		return nil
+	})
+}

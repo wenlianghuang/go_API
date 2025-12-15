@@ -37,6 +37,12 @@ func (m *MockStore) CreateDevice(dev *model.Device) error         { return nil }
 func (m *MockStore) GetDeviceByID(id uint) (*model.Device, error) { return nil, nil }
 func (m *MockStore) ListDevices() ([]model.Device, error)         { return nil, nil }
 func (m *MockStore) AddTelemetry(data *model.Telemetry) error     { return nil }
+func (m *MockStore) DeleteDeviceWithAllData(id uint) error {
+	if m.ShouldError {
+		return errors.New("mock delete error")
+	}
+	return nil
+}
 
 func TestHandleCreateUser(t *testing.T) {
 	// 定義測試表格 (Table)

@@ -161,8 +161,10 @@ func (s *Server) HandleGetDevice(w http.ResponseWriter, r *http.Request) {
 		WriteError(w, http.StatusNotFound, "Device not found")
 		return
 	}
-
-	WriteJSON(w, http.StatusOK, device)
+	// 2. 🔥 【關鍵步驟】 將 GORM Model 轉換為 DTO
+	resp := ToDeviceResponse(device)
+	//WriteJSON(w, http.StatusOK, device)
+	WriteJSON(w, http.StatusOK, resp)
 }
 
 // HandleCreateTelemetry 處理建立遙測數據的請求
@@ -220,4 +222,25 @@ func (s *Server) HandleCreateTelemetry(w http.ResponseWriter, r *http.Request) {
 	}
 
 	WriteJSON(w, http.StatusCreated, telemetry)
+}
+
+// 處理刪除請求
+func (s *Server) HandleDeleteDevice(w http.ResponseWriter, r *http.Request) {
+	// 1. 解析 ID
+	idStr := chi.URLParam(r, "id")
+	id, err := strconv.ParseUint(idStr, 10, 32)
+	if err != nil {
+		WriteError(w, http.StatusBadRequest, "Invalid device ID")
+		return
+	}
+
+	// 2. 呼叫 Store 執行原子性刪除
+	// 因為我们在介面 (store/db.go) 定義了，所以這裡可以呼叫 s.Store.DeleteDeviceWithAllData
+	if err := s.Store.DeleteDeviceWithAllData(uint(id)); err != nil {
+		WriteError(w, http.StatusInternalServerError, "Failed to delete device: "+err.Error())
+		return
+	}
+
+	// 3. 回傳成功訊息
+	WriteJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
 }

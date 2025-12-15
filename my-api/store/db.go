@@ -27,6 +27,9 @@ type Storage interface {
 	GetDeviceByID(id uint) (*model.Device, error)
 	ListDevices() ([]model.Device, error)
 
+	// 定義刪除功能的合約
+	// 這樣 Server 才知道可以呼叫這個方法
+	DeleteDeviceWithAllData(id uint) error
 	// 數據相關 (這裡先定義一個簡單的)
 	AddTelemetry(data *model.Telemetry) error
 }

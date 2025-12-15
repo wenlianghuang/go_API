@@ -55,7 +55,10 @@ func (s *Server) mountRoutes() {
 		r.Get("/devices", s.HandleListDevices)
 		r.Get("/devices/{id}", s.HandleGetDevice)
 
+		// 註冊 DELETE 路由
+		r.Delete("/devices/{id}", s.HandleDeleteDevice)
 		// Telemetry 相關路由（需要認證）
 		r.Post("/telemetries", s.HandleCreateTelemetry)
+
 	})
 }
