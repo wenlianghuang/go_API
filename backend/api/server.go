@@ -54,6 +54,8 @@ func (s *Server) mountRoutes() {
 		r.Post("/devices", s.HandleCreateDevice)
 		r.Get("/devices", s.HandleListDevices)
 		r.Get("/devices/{id}", s.HandleGetDevice)
+		r.Put("/devices/{id}", s.HandleUpdateDevice)  // PUT: 完整更新（所有字段必須提供）
+		r.Patch("/devices/{id}", s.HandlePatchDevice) // PATCH: 部分更新（只需提供要更新的字段）
 
 		// 註冊 DELETE 路由
 		r.Delete("/devices/{id}", s.HandleDeleteDevice)

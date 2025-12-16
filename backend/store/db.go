@@ -30,6 +30,10 @@ type Storage interface {
 	// 定義刪除功能的合約
 	// 這樣 Server 才知道可以呼叫這個方法
 	DeleteDeviceWithAllData(id uint) error
+	// 更新整個設備（所有字段）- PUT 使用
+	UpdateDevice(id uint, device *model.Device) error
+	// 部分更新設備（只更新提供的字段）- PATCH 使用
+	PatchDevice(id uint, updates map[string]interface{}) error
 	// 數據相關 (這裡先定義一個簡單的)
 	AddTelemetry(data *model.Telemetry) error
 }

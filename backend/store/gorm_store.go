@@ -91,3 +91,50 @@ func (s *GormStore) DeleteDeviceWithAllData(id uint) error {
 		return nil
 	})
 }
+
+// UpdateDevice 更新整個設備（所有字段）- PUT 使用
+func (s *GormStore) UpdateDevice(id uint, device *model.Device) error {
+	// 先檢查設備是否存在
+	var existingDevice model.Device
+	result := s.db.First(&existingDevice, id)
+	if errors.Is(result.Error, gorm.ErrRecordNotFound) {
+		return errors.New("device not found")
+	}
+	if result.Error != nil {
+		return result.Error
+	}
+
+	// 更新設備的所有字段（除了 ID 和 CreatedAt）
+	device.ID = id // 確保 ID 不會被更新
+	updateResult := s.db.Model(&existingDevice).Updates(model.Device{
+		Name:       device.Name,
+		Type:       device.Type,
+		MacAddress: device.MacAddress,
+		IsActive:   device.IsActive,
+	})
+
+	if updateResult.Error != nil {
+		return updateResult.Error
+	}
+	return nil
+}
+
+// PatchDevice 部分更新設備（只更新提供的字段）- PATCH 使用
+func (s *GormStore) PatchDevice(id uint, updates map[string]interface{}) error {
+	// 先檢查設備是否存在
+	var existingDevice model.Device
+	result := s.db.First(&existingDevice, id)
+	if errors.Is(result.Error, gorm.ErrRecordNotFound) {
+		return errors.New("device not found")
+	}
+	if result.Error != nil {
+		return result.Error
+	}
+
+	// 只更新提供的字段
+	updateResult := s.db.Model(&existingDevice).Updates(updates)
+	if updateResult.Error != nil {
+		return updateResult.Error
+	}
+	return nil
+}

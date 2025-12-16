@@ -244,3 +244,142 @@ func (s *Server) HandleDeleteDevice(w http.ResponseWriter, r *http.Request) {
 	// 3. 回傳成功訊息
 	WriteJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
 }
+
+// HandleUpdateDevice 處理更新整個設備的請求
+func (s *Server) HandleUpdateDevice(w http.ResponseWriter, r *http.Request) {
+	type UpdateDeviceRequest struct {
+		Name       string `json:"name"`
+		Type       string `json:"type"`
+		MacAddress string `json:"mac_address"`
+		IsActive   bool   `json:"is_active"`
+	}
+
+	// 1. 解析 ID
+	idStr := chi.URLParam(r, "id")
+	id, err := strconv.ParseUint(idStr, 10, 32)
+	if err != nil {
+		WriteError(w, http.StatusBadRequest, "Invalid device ID")
+		return
+	}
+
+	// 2. 解析請求體
+	var req UpdateDeviceRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		WriteError(w, http.StatusBadRequest, "Invalid request payload")
+		return
+	}
+
+	// 3. PUT 要求所有必填字段都必須提供
+	if req.Name == "" || req.MacAddress == "" {
+		WriteError(w, http.StatusBadRequest, "Name and MacAddress are required for PUT request")
+		return
+	}
+
+	// 4. 驗證設備是否存在
+	_, err = s.Store.GetDeviceByID(uint(id))
+	if err != nil {
+		WriteError(w, http.StatusNotFound, "Device not found")
+		return
+	}
+
+	// 5. 轉換成 Domain Model
+	device := &model.Device{
+		Name:       req.Name,
+		Type:       req.Type,
+		MacAddress: req.MacAddress,
+		IsActive:   req.IsActive,
+	}
+
+	// 6. 更新設備
+	if err := s.Store.UpdateDevice(uint(id), device); err != nil {
+		WriteError(w, http.StatusInternalServerError, "Failed to update device: "+err.Error())
+		return
+	}
+
+	// 7. 回傳更新後的設備資訊
+	updatedDevice, err := s.Store.GetDeviceByID(uint(id))
+	if err != nil {
+		WriteError(w, http.StatusInternalServerError, "Failed to fetch updated device")
+		return
+	}
+
+	resp := ToDeviceResponse(updatedDevice)
+	WriteJSON(w, http.StatusOK, resp)
+}
+
+// HandlePatchDevice 處理 PATCH 請求 - 部分更新（只需要提供要更新的字段）
+func (s *Server) HandlePatchDevice(w http.ResponseWriter, r *http.Request) {
+	type PatchDeviceRequest struct {
+		Name       *string `json:"name,omitempty"` // 使用指針，nil 表示不更新
+		Type       *string `json:"type,omitempty"`
+		MacAddress *string `json:"mac_address,omitempty"`
+		IsActive   *bool   `json:"is_active,omitempty"`
+	}
+
+	// 1. 解析 ID
+	idStr := chi.URLParam(r, "id")
+	id, err := strconv.ParseUint(idStr, 10, 32)
+	if err != nil {
+		WriteError(w, http.StatusBadRequest, "Invalid device ID")
+		return
+	}
+
+	// 2. 驗證設備是否存在
+	_, err = s.Store.GetDeviceByID(uint(id))
+	if err != nil {
+		WriteError(w, http.StatusNotFound, "Device not found")
+		return
+	}
+
+	// 3. 解析請求體
+	var req PatchDeviceRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		WriteError(w, http.StatusBadRequest, "Invalid request payload")
+		return
+	}
+
+	// 4. 構建更新映射（只包含提供的字段）
+	updates := make(map[string]interface{})
+	if req.Name != nil {
+		if *req.Name == "" {
+			WriteError(w, http.StatusBadRequest, "Name cannot be empty")
+			return
+		}
+		updates["name"] = *req.Name
+	}
+	if req.Type != nil {
+		updates["type"] = *req.Type
+	}
+	if req.MacAddress != nil {
+		if *req.MacAddress == "" {
+			WriteError(w, http.StatusBadRequest, "MacAddress cannot be empty")
+			return
+		}
+		updates["mac_address"] = *req.MacAddress
+	}
+	if req.IsActive != nil {
+		updates["is_active"] = *req.IsActive
+	}
+
+	// 5. 如果沒有任何更新字段
+	if len(updates) == 0 {
+		WriteError(w, http.StatusBadRequest, "At least one field must be provided for update")
+		return
+	}
+
+	// 6. 執行部分更新
+	if err := s.Store.PatchDevice(uint(id), updates); err != nil {
+		WriteError(w, http.StatusInternalServerError, "Failed to update device: "+err.Error())
+		return
+	}
+
+	// 7. 回傳更新後的設備資訊
+	updatedDevice, err := s.Store.GetDeviceByID(uint(id))
+	if err != nil {
+		WriteError(w, http.StatusInternalServerError, "Failed to fetch updated device")
+		return
+	}
+
+	resp := ToDeviceResponse(updatedDevice)
+	WriteJSON(w, http.StatusOK, resp)
+}

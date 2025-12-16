@@ -44,6 +44,20 @@ func (m *MockStore) DeleteDeviceWithAllData(id uint) error {
 	return nil
 }
 
+func (m *MockStore) UpdateDevice(id uint, device *model.Device) error {
+	if m.ShouldError {
+		return errors.New("mock update error")
+	}
+	return nil
+}
+
+func (m *MockStore) PatchDevice(id uint, updates map[string]interface{}) error {
+	if m.ShouldError {
+		return errors.New("mock patch error")
+	}
+	return nil
+}
+
 func TestHandleCreateUser(t *testing.T) {
 	// 定義測試表格 (Table)
 	tests := []struct {
