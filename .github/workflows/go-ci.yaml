@@ -39,13 +39,13 @@ jobs:
       # Step 2: 下載 Go Modules 依賴 (使用修正後的 go.mod)
       - name: Download Go modules
         run: |
-          cd my-api 
+          cd backend 
           go mod tidy
       
       # Step 3: 執行測試與品質檢查
       - name: Run checks and tests
         run: |
-          cd my-api
+          cd backend
           test -z "$(gofmt -l .)"  # 檢查格式
           go vet ./...              # 執行靜態分析
           go test -v -race -coverprofile=coverage.txt ./... # 執行測試
@@ -53,12 +53,12 @@ jobs:
       # Step 4: 建構 Go 應用程式
       - name: Build application
         run: |
-          cd my-api
-          go build -o my-api-binary
+          cd backend
+          go build -o backend-binary
         
       # Step 5: 上傳建構成品
       - name: Upload Build Artifact
         uses: actions/upload-artifact@v4
         with:
           name: go-app-binary-1.22 # 成品名稱不再使用矩陣
-          path: my-api/my-api-binary
+          path: backend/backend-binary
