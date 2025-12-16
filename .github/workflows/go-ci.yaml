@@ -14,42 +14,58 @@ jobs:
       matrix:
         go-version: [ '1.20', '1.21', '1.22' ]
 
-    # 設定全域工作目錄，讓所有 run 指令都在 go_API/my-api 下執行
-    #defaults:
-    #  run:
-    #    working-directory: go_API/my-api
-
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-
+        
+      # 【除錯步驟 (可選，但建議執行一次確認路徑)】
+      - name: Debug File Structure
+        run: ls -F
+      
       - name: Setup Go ${{ matrix.go-version }}
         uses: actions/setup-go@v5
         with:
           go-version: ${{ matrix.go-version }}
           cache: true
-          # 這裡很重要：告訴 setup-go 依賴檔在哪裡，讓 cache 機制能正確運作
-          cache-dependency-path: go_API/my-api/go.sum
+          # 這裡的 cache-dependency-path 應該是相對於 Runner 根目錄的 go.sum 路徑
+          cache-dependency-path: my-api/go.sum 
 
+      # Step 1: 下載 Go Modules 依賴
       - name: Download Go modules
         run: |
-          cd go_API/my-api  # 確保進入包含 go.mod 的資料夾
+          # 進入實際包含 go.mod 的資料夾
+          cd my-api 
           go mod tidy
       
-      # 【關鍵修正點：後續 run 指令也要 cd 或使用完整路徑】
+      # Step 2: 程式碼風格檢查
+      - name: Check code format (go fmt)
+        run: |
+          cd my-api
+          test -z "$(gofmt -l .)"
+        
+      # Step 3: 執行靜態分析
+      - name: Run go vet
+        run: |
+          cd my-api
+          go vet ./...
+        
+      # Step 4: 執行單元測試和覆蓋率
       - name: Run tests
         run: |
-          cd go_API/my-api
+          cd my-api
           go test -v -race -coverprofile=coverage.txt ./...
-
+        
+      # Step 5: 建構 Go 應用程式
       - name: Build application
         run: |
-          cd go_API/my-api
+          cd my-api
+          # 將二進制檔案命名並存放在 my-api 目錄下
           go build -o my-api-binary
-          
-      # Upload Artifact 步驟仍使用完整路徑 (參見上一個回覆的修正)
+        
+      # Step 6: 上傳建構成品
       - name: Upload Build Artifact
         uses: actions/upload-artifact@v4
         with:
           name: go-app-binary-${{ matrix.go-version }}
-          path: go_API/my-api/my-api-binary
+          # ⚠️ 路徑必須是 Runner 根目錄到檔案的完整路徑
+          path: my-api/my-api-binary
