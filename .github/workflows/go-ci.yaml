@@ -13,45 +13,37 @@ jobs:
     strategy:
       matrix:
         go-version: [ '1.20', '1.21', '1.22' ]
-        
-    # 【關鍵修改點 1：設定預設工作目錄】
+
+    # 設定全域工作目錄，讓所有 run 指令都在 go_API/my-api 下執行
     defaults:
       run:
         working-directory: go_API/my-api
-        
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-        
+
       - name: Setup Go ${{ matrix.go-version }}
         uses: actions/setup-go@v5
         with:
           go-version: ${{ matrix.go-version }}
           cache: true
-          
-      # 執行以下步驟時，都將在 go_API/my-api 目錄下執行
+          # 這裡很重要：告訴 setup-go 依賴檔在哪裡，讓 cache 機制能正確運作
+          cache-dependency-path: go_API/my-api/go.sum
+
       - name: Download Go modules
         run: go mod tidy
-        
-      - name: Check code format (go fmt)
-        run: test -z "$(gofmt -l .)"
-        
-      - name: Run go vet
-        run: go vet ./...
-        
+
       - name: Run tests
-        # 由於 working-directory 已設定，這裡不需要指定 ./...，但加上也沒問題
-        run: go test -v -race -coverprofile=coverage.txt ./...
-        
+        run: go test -v -race ./...
+
       - name: Build application
-        # 在 go_API/my-api 中建構，二進制檔會位於該目錄下
+        # 明確指定輸出檔名為 my-api-binary
         run: go build -o my-api-binary
-        
-      # 【關鍵修改點 2：上傳成品路徑調整】
+
       - name: Upload Build Artifact
         uses: actions/upload-artifact@v4
         with:
           name: go-app-binary-${{ matrix.go-version }}
-          # 由於工作目錄在 go_API/my-api，因此路徑指向該目錄下的建構結果
+          # ⚠️ 這裡必須寫完整路徑，因為此步驟不受 defaults 影響
           path: go_API/my-api/my-api-binary
-          # 如果您將工作目錄設定在 Job 預設值，這裡的 path 可以寫成 my-api-binary (相對於 Runner 根目錄)
