@@ -15,9 +15,9 @@ jobs:
         go-version: [ '1.20', '1.21', '1.22' ]
 
     # 設定全域工作目錄，讓所有 run 指令都在 go_API/my-api 下執行
-    defaults:
-      run:
-        working-directory: go_API/my-api
+    #defaults:
+    #  run:
+    #    working-directory: go_API/my-api
 
     steps:
       - name: Checkout code
@@ -32,18 +32,24 @@ jobs:
           cache-dependency-path: go_API/my-api/go.sum
 
       - name: Download Go modules
-        run: go mod tidy
-
+        run: |
+          cd go_API/my-api  # 確保進入包含 go.mod 的資料夾
+          go mod tidy
+      
+      # 【關鍵修正點：後續 run 指令也要 cd 或使用完整路徑】
       - name: Run tests
-        run: go test -v -race ./...
+        run: |
+          cd go_API/my-api
+          go test -v -race -coverprofile=coverage.txt ./...
 
       - name: Build application
-        # 明確指定輸出檔名為 my-api-binary
-        run: go build -o my-api-binary
-
+        run: |
+          cd go_API/my-api
+          go build -o my-api-binary
+          
+      # Upload Artifact 步驟仍使用完整路徑 (參見上一個回覆的修正)
       - name: Upload Build Artifact
         uses: actions/upload-artifact@v4
         with:
           name: go-app-binary-${{ matrix.go-version }}
-          # ⚠️ 這裡必須寫完整路徑，因為此步驟不受 defaults 影響
           path: go_API/my-api/my-api-binary
