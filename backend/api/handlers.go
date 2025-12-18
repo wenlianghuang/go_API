@@ -11,6 +11,7 @@ import (
 	"my-api/store"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/gorilla/websocket"
 )
 
 // HandleCreateUser 處理建立使用者的請求
@@ -222,6 +223,7 @@ func (s *Server) HandleCreateTelemetry(w http.ResponseWriter, r *http.Request) {
 	}
 
 	WriteJSON(w, http.StatusCreated, telemetry)
+	s.Hub.Broadcast(ToTelemetryResponse(*telemetry)) // 使用 DTO 推播乾淨的數據
 }
 
 // 處理刪除請求
@@ -394,4 +396,29 @@ func (s *Server) HandleAnalyzeDevice(w http.ResponseWriter, r *http.Request) {
 	WriteJSON(w, http.StatusAccepted, map[string]string{
 		"message": "Task queued",
 	})
+}
+
+// backend/api/handlers.go
+
+var upgrader = websocket.Upgrader{
+	CheckOrigin: func(r *http.Request) bool { return true }, // 允許所有來源連線
+}
+
+func (s *Server) HandleWS(w http.ResponseWriter, r *http.Request) {
+	conn, err := upgrader.Upgrade(w, r, nil)
+	if err != nil {
+		fmt.Printf("❌ WS 升級失敗: %v\n", err)
+		return
+	}
+
+	s.Hub.AddClient(conn)
+
+	// 保持連線，直到客戶端斷開
+	defer s.Hub.RemoveClient(conn)
+	for {
+		// 這裡可以讀取客戶端傳來的訊息，目前我們先放著讓它維持連線
+		if _, _, err := conn.ReadMessage(); err != nil {
+			break
+		}
+	}
 }
