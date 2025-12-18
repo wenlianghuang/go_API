@@ -383,3 +383,15 @@ func (s *Server) HandlePatchDevice(w http.ResponseWriter, r *http.Request) {
 	resp := ToDeviceResponse(updatedDevice)
 	WriteJSON(w, http.StatusOK, resp)
 }
+
+func (s *Server) HandleAnalyzeDevice(w http.ResponseWriter, r *http.Request) {
+	idStr := chi.URLParam(r, "id")
+	id, _ := strconv.ParseUint(idStr, 10, 32)
+
+	// 將任務丟進通道，如果通道滿了會暫時阻塞
+	s.TaskChan <- uint(id)
+
+	WriteJSON(w, http.StatusAccepted, map[string]string{
+		"message": "Task queued",
+	})
+}
