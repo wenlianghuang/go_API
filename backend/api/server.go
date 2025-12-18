@@ -1,8 +1,10 @@
 package api
 
 import (
+	"fmt"
 	"my-api/store"
 	"net/http"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
@@ -10,19 +12,33 @@ import (
 
 // Server 結構體持有所有的依賴 (Router 和 Storage)
 type Server struct {
-	Router *chi.Mux
-	Store  store.Storage // 注意：這裡依賴的是 Storage Interface，而不是具體的 struct
+	Router   *chi.Mux
+	Store    store.Storage // 注意：這裡依賴的是 Storage Interface，而不是具體的 struct
+	TaskChan chan uint     // 存放設備 ID 的任務通道
 }
 
 // NewServer 初始化 Server 並掛載路由
 func NewServer(store store.Storage) *Server {
 	s := &Server{
-		Router: chi.NewRouter(),
-		Store:  store,
+		Router:   chi.NewRouter(),
+		Store:    store,
+		TaskChan: make(chan uint, 100), // 設定通道大小為 100
 	}
+
+	go s.startWorker()
 
 	s.mountRoutes()
 	return s
+}
+
+// startWorker 是一個永遠在背景運行的消費者
+func (s *Server) startWorker() {
+	fmt.Println("👷 Worker 已啟動，等待任務中...")
+	for id := range s.TaskChan { // 不斷從通道拿 ID
+		fmt.Printf("👷 Worker 正在處理設備 ID: %d\n", id)
+		time.Sleep(5 * time.Second) // 模擬耗時計算
+		fmt.Printf("👷 Worker 處理 ID: %d 完成\n", id)
+	}
 }
 
 func (s *Server) mountRoutes() {
@@ -62,5 +78,6 @@ func (s *Server) mountRoutes() {
 		// Telemetry 相關路由（需要認證）
 		r.Post("/telemetries", s.HandleCreateTelemetry)
 
+		r.Post("/devices/{id}/analyze", s.HandleAnalyzeDevice)
 	})
 }
