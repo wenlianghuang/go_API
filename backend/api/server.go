@@ -15,6 +15,7 @@ type Server struct {
 	Router   *chi.Mux
 	Store    store.Storage // 注意：這裡依賴的是 Storage Interface，而不是具體的 struct
 	TaskChan chan uint     // 存放設備 ID 的任務通道
+	Hub      *Hub          // 存放 WebSocket 的 Hub
 }
 
 // NewServer 初始化 Server 並掛載路由
@@ -23,6 +24,7 @@ func NewServer(store store.Storage) *Server {
 		Router:   chi.NewRouter(),
 		Store:    store,
 		TaskChan: make(chan uint, 100), // 設定通道大小為 100
+		Hub:      NewHub(),
 	}
 
 	go s.startWorker()
@@ -51,6 +53,7 @@ func (s *Server) mountRoutes() {
 	s.Router.Get("/", func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte("Welcome to the Mortgage System API"))
 	})
+	s.Router.Get("/ws", s.HandleWS)
 
 	// 假設註冊也是公開的
 	s.Router.Post("/users", s.HandleCreateUser)
@@ -79,5 +82,6 @@ func (s *Server) mountRoutes() {
 		r.Post("/telemetries", s.HandleCreateTelemetry)
 
 		r.Post("/devices/{id}/analyze", s.HandleAnalyzeDevice)
+
 	})
 }
