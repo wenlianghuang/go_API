@@ -80,7 +80,7 @@ func (s *Server) mountRoutes() {
 		r.Delete("/devices/{id}", s.HandleDeleteDevice)
 		// Telemetry 相關路由（需要認證）
 		r.Post("/telemetries", s.HandleCreateTelemetry)
-
+		// Test Analyze Device
 		r.Post("/devices/{id}/analyze", s.HandleAnalyzeDevice)
 
 	})
