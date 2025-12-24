@@ -526,6 +526,7 @@ func (s *Server) HandlePatchTelemetry(w http.ResponseWriter, r *http.Request) {
 	}
 
 	WriteJSON(w, http.StatusOK, updatedTelemetry)
+	s.Hub.Broadcast(ToTelemetryResponse(*updatedTelemetry))
 }
 
 // Handle Get telemetry
