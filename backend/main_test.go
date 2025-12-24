@@ -33,10 +33,11 @@ func (m *MockStore) Get(id string) (store.User, error) { return store.User{}, ni
 func (m *MockStore) List() ([]store.User, error)       { return nil, nil }
 
 // 實作 Storage 介面的設備相關方法
-func (m *MockStore) CreateDevice(dev *model.Device) error         { return nil }
-func (m *MockStore) GetDeviceByID(id uint) (*model.Device, error) { return nil, nil }
-func (m *MockStore) ListDevices() ([]model.Device, error)         { return nil, nil }
-func (m *MockStore) AddTelemetry(data *model.Telemetry) error     { return nil }
+func (m *MockStore) CreateDevice(dev *model.Device) error               { return nil }
+func (m *MockStore) GetDeviceByID(id uint) (*model.Device, error)       { return nil, nil }
+func (m *MockStore) ListDevices() ([]model.Device, error)               { return nil, nil }
+func (m *MockStore) AddTelemetry(data *model.Telemetry) error           { return nil }
+func (m *MockStore) GetTelemetryByID(id uint) (*model.Telemetry, error) { return nil, nil }
 func (m *MockStore) DeleteDeviceWithAllData(id uint) error {
 	if m.ShouldError {
 		return errors.New("mock delete error")

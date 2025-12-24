@@ -36,6 +36,7 @@ type Storage interface {
 	PatchDevice(id uint, updates map[string]interface{}) error
 	// 數據相關 (這裡先定義一個簡單的)
 	AddTelemetry(data *model.Telemetry) error
+	GetTelemetryByID(id uint) (*model.Telemetry, error)
 }
 
 // MemoryStore 是 Storage 的一個實作 (存在記憶體中)

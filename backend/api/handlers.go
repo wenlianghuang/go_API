@@ -226,6 +226,23 @@ func (s *Server) HandleCreateTelemetry(w http.ResponseWriter, r *http.Request) {
 	s.Hub.Broadcast(ToTelemetryResponse(*telemetry)) // 使用 DTO 推播乾淨的數據
 }
 
+// HandleGetTelemetry 處理取得遙測數據的請求
+func (s *Server) HandleGetTelemetry(w http.ResponseWriter, r *http.Request) {
+	idStr := chi.URLParam(r, "id")
+	id, err := strconv.ParseUint(idStr, 10, 32)
+	if err != nil {
+		WriteError(w, http.StatusBadRequest, "Invalid telemetry ID")
+		return
+	}
+
+	telemetry, err := s.Store.GetTelemetryByID(uint(id))
+	if err != nil {
+		WriteError(w, http.StatusNotFound, "Telemetry not found")
+		return
+	}
+	WriteJSON(w, http.StatusOK, telemetry)
+}
+
 // 處理刪除請求
 func (s *Server) HandleDeleteDevice(w http.ResponseWriter, r *http.Request) {
 	// 1. 解析 ID
@@ -404,6 +421,7 @@ var upgrader = websocket.Upgrader{
 	CheckOrigin: func(r *http.Request) bool { return true }, // 允許所有來源連線
 }
 
+// HandleWS 處理 WebSocket 連線
 func (s *Server) HandleWS(w http.ResponseWriter, r *http.Request) {
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
@@ -422,3 +440,5 @@ func (s *Server) HandleWS(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 }
+
+// Handle Get telemetry

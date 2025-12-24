@@ -378,7 +378,7 @@ docker compose down -v
 - [Docker Build Push Action](https://github.com/docker/build-push-action)
 - [GitHub Container Registry](https://docs.github.com/en/packages/working-with-a-github-packages-registry/working-with-the-container-registry)
 - [Docker Compose 文件](https://docs.docker.com/compose/)
-
+- [Discuss with Gemini](https://gemini.google.com/share/948036e582dc)
 ---
 
 ## 更新記錄

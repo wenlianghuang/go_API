@@ -910,6 +910,8 @@ docker run --rm -v postgres-data:/data -v $(pwd):/backup alpine \
 docker run --rm -v postgres-data:/data -v $(pwd):/backup alpine \
   tar xzf /backup/postgres-backup-YYYYMMDD.tar.gz -C /data
 ```
+## 目前整體Go backend的架構
+- [Go Backend](https://tinyurl.com/24m5vnr2)
 
 ## 📚 相關資源
 

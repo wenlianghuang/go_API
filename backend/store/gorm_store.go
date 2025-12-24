@@ -57,6 +57,20 @@ func (s *GormStore) AddTelemetry(data *model.Telemetry) error {
 	return s.db.Create(data).Error
 }
 
+// GetTelemetryByID 實作查詢單一遙測數據
+func (s *GormStore) GetTelemetryByID(id uint) (*model.Telemetry, error) {
+	var telemetry model.Telemetry
+	result := s.db.First(&telemetry, id)
+
+	if errors.Is(result.Error, gorm.ErrRecordNotFound) {
+		return nil, errors.New("telemetry not found")
+	}
+	if result.Error != nil {
+		return nil, result.Error
+	}
+	return &telemetry, nil
+}
+
 // Create 實作建立使用者
 func (s *GormStore) Create(u User) error {
 	return s.db.Create(&u).Error
