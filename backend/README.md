@@ -370,10 +370,6 @@ volumes:
 
 執行：
 ```bash
-# 使用新版本 Docker（推荐）
-docker compose up -d
-
-# 或使用旧版本（如果 docker compose 不可用）
 docker-compose up -d
 ```
 
@@ -383,7 +379,7 @@ docker-compose up -d
 
 ```bash
 # 1. 確保服務已啟動
-docker compose up -d
+docker-compose up -d
 
 # 2. 等待 PostgreSQL 完全啟動
 sleep 5
@@ -409,31 +405,31 @@ pg_dump -U postgres -h localhost -d iot_db | \
 
 ```bash
 # 啟動服務（後台運行）
-docker compose up -d
+docker-compose up -d
 
 # 查看服務狀態
-docker compose ps
+docker-compose ps
 
 # 查看日誌
-docker compose logs
-docker compose logs api        # 只看 API 日誌
-docker compose logs -f api     # 實時查看 API 日誌
+docker-compose logs
+docker-compose logs api        # 只看 API 日誌
+docker-compose logs -f api     # 實時查看 API 日誌
 
 # 停止服務
-docker compose stop
+docker-compose stop
 
 # 停止並刪除容器
-docker compose down
+docker-compose down
 
 # 停止並刪除容器和 volumes（會刪除數據！）
-docker compose down -v
+docker-compose down -v
 
 # 重新構建並啟動
-docker compose build
-docker compose up -d
+docker-compose build
+docker-compose up -d
 
 # 重啟服務
-docker compose restart api
+docker-compose restart api
 ```
 
 ### 方式二：單獨使用 Docker（使用 Docker Volumes 持久化數據）
