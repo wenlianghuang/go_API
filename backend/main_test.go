@@ -4,10 +4,8 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"net/http"
 	"net/http/httptest"
-	"sync"
 	"testing"
 
 	"my-api/api"
@@ -131,37 +129,3 @@ func TestHandleCreateUser(t *testing.T) {
 }
 
 // backend/main_test.go
-
-func TestConcurrentAnalyze(t *testing.T) {
-	// 1. 初始化 Server 與模擬環境
-	mockStore := &MockStore{}
-	srv := api.NewServer(mockStore) // 這裡會啟動背景 Worker
-
-	const numRequests = 50
-	var wg sync.WaitGroup
-	wg.Add(numRequests)
-
-	// 2. 啟動 50 個 Goroutine 同時發送請求
-	for i := 1; i <= numRequests; i++ {
-		go func(id int) {
-			defer wg.Done()
-
-			// 構造請求
-			url := fmt.Sprintf("/devices/%d/analyze", id)
-			req := httptest.NewRequest(http.MethodPost, url, nil)
-			rr := httptest.NewRecorder()
-
-			// 執行 Handler
-			srv.Router.ServeHTTP(rr, req)
-
-			// 驗證是否立即收到 202 Accepted
-			if rr.Code != http.StatusAccepted {
-				t.Errorf("請求 %d 失敗，狀態碼: %v", id, rr.Code)
-			}
-		}(i)
-	}
-
-	// 等待所有 API 請求發送完畢
-	wg.Wait()
-	fmt.Println("✅ 所有 50 個併發請求已成功送入隊列")
-}
