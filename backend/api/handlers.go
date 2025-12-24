@@ -441,4 +441,91 @@ func (s *Server) HandleWS(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// HandlePatchTelemetry 處理 PATCH 請求 - 部分更新遙測數據（只需要提供要更新的字段）
+func (s *Server) HandlePatchTelemetry(w http.ResponseWriter, r *http.Request) {
+	type PatchTelemetryRequest struct {
+		DeviceID   *uint    `json:"device_id,omitempty"` // 使用指針，nil 表示不更新
+		DataType   *string  `json:"data_type,omitempty"`
+		Value      *float64 `json:"value,omitempty"`
+		RecordedAt *string  `json:"recorded_at,omitempty"`
+	}
+
+	// 1. 解析 ID
+	idStr := chi.URLParam(r, "id")
+	id, err := strconv.ParseUint(idStr, 10, 32)
+	if err != nil {
+		WriteError(w, http.StatusBadRequest, "Invalid telemetry ID")
+		return
+	}
+
+	// 2. 驗證遙測數據是否存在
+	_, err = s.Store.GetTelemetryByID(uint(id))
+	if err != nil {
+		WriteError(w, http.StatusNotFound, "Telemetry not found")
+		return
+	}
+
+	// 3. 解析請求體
+	var req PatchTelemetryRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		WriteError(w, http.StatusBadRequest, "Invalid request payload")
+		return
+	}
+
+	// 4. 構建更新映射（只包含提供的字段）
+	updates := make(map[string]interface{})
+	if req.DeviceID != nil {
+		if *req.DeviceID == 0 {
+			WriteError(w, http.StatusBadRequest, "DeviceID cannot be zero")
+			return
+		}
+		// 驗證設備是否存在
+		_, err := s.Store.GetDeviceByID(*req.DeviceID)
+		if err != nil {
+			WriteError(w, http.StatusNotFound, fmt.Sprintf("Device with ID %d not found", *req.DeviceID))
+			return
+		}
+		updates["device_id"] = *req.DeviceID
+	}
+	if req.DataType != nil {
+		if *req.DataType == "" {
+			WriteError(w, http.StatusBadRequest, "DataType cannot be empty")
+			return
+		}
+		updates["data_type"] = *req.DataType
+	}
+	if req.Value != nil {
+		updates["value"] = *req.Value
+	}
+	if req.RecordedAt != nil {
+		parsedTime, err := time.Parse(time.RFC3339, *req.RecordedAt)
+		if err != nil {
+			WriteError(w, http.StatusBadRequest, "Invalid recorded_at format, expected RFC3339")
+			return
+		}
+		updates["recorded_at"] = parsedTime
+	}
+
+	// 5. 如果沒有任何更新字段
+	if len(updates) == 0 {
+		WriteError(w, http.StatusBadRequest, "At least one field must be provided for update")
+		return
+	}
+
+	// 6. 執行部分更新
+	if err := s.Store.PatchTelemetry(uint(id), updates); err != nil {
+		WriteError(w, http.StatusInternalServerError, "Failed to update telemetry: "+err.Error())
+		return
+	}
+
+	// 7. 回傳更新後的遙測數據資訊
+	updatedTelemetry, err := s.Store.GetTelemetryByID(uint(id))
+	if err != nil {
+		WriteError(w, http.StatusInternalServerError, "Failed to fetch updated telemetry")
+		return
+	}
+
+	WriteJSON(w, http.StatusOK, updatedTelemetry)
+}
+
 // Handle Get telemetry

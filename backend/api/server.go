@@ -82,6 +82,8 @@ func (s *Server) mountRoutes() {
 		r.Get("/telemetries/{id}", s.HandleGetTelemetry)
 		// Telemetry 相關路由（需要認證）
 		r.Post("/telemetries", s.HandleCreateTelemetry)
+		// Patch telemetry
+		r.Patch("/telemetries/{id}", s.HandlePatchTelemetry)
 		// Test Analyze Device
 		r.Post("/devices/{id}/analyze", s.HandleAnalyzeDevice)
 

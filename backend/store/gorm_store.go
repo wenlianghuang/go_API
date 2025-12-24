@@ -152,3 +152,23 @@ func (s *GormStore) PatchDevice(id uint, updates map[string]interface{}) error {
 	}
 	return nil
 }
+
+// PatchTelemetry 部分更新遙測數據（只更新提供的字段）- PATCH 使用
+func (s *GormStore) PatchTelemetry(id uint, updates map[string]interface{}) error {
+	// 先檢查遙測數據是否存在
+	var existingTelemetry model.Telemetry
+	result := s.db.First(&existingTelemetry, id)
+	if errors.Is(result.Error, gorm.ErrRecordNotFound) {
+		return errors.New("telemetry not found")
+	}
+	if result.Error != nil {
+		return result.Error
+	}
+
+	// 只更新提供的字段
+	updateResult := s.db.Model(&existingTelemetry).Updates(updates)
+	if updateResult.Error != nil {
+		return updateResult.Error
+	}
+	return nil
+}
