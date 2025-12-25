@@ -8,6 +8,7 @@
 - [項目結構](#項目結構)
 - [架構設計](#架構設計)
 - [API 端點](#api-端點)
+- [WebSocket 實時推播](#-websocket-實時推播)
 - [代碼流程說明](#代碼流程說明)
 - [環境變數配置](#環境變數配置)
 - [本地開發](#本地開發)
@@ -31,7 +32,8 @@ backend/
 │   ├── server.go          # 路由配置
 │   ├── middleware.go      # 中間件（認證等）
 │   ├── response.go        # 響應工具函數
-│   └── dto.go             # 數據傳輸對象
+│   ├── dto.go             # 數據傳輸對象
+│   └── ws_hub.go          # WebSocket Hub（管理連線和推播）
 ├── model/                  # 領域模型
 │   └── device.go          # Device 和 Telemetry 模型
 ├── store/                  # 數據訪問層
@@ -95,6 +97,7 @@ backend/
 |------|------|------|
 | GET | `/` | API 歡迎訊息 |
 | POST | `/users` | 創建使用者 |
+| GET | `/ws` | WebSocket 連線端點（用於實時數據推播） |
 
 ### 私有端點（需要認證）
 
@@ -126,7 +129,9 @@ Authorization: Bearer secret-token-123
 
 | 方法 | 路徑 | 說明 |
 |------|------|------|
-| POST | `/telemetries` | 創建遙測數據 |
+| POST | `/telemetries` | 創建遙測數據（會自動推播給所有 WebSocket 客戶端） |
+| GET | `/telemetries/{id}` | 取得單一遙測數據 |
+| PATCH | `/telemetries/{id}` | 部分更新遙測數據（會自動推播給所有 WebSocket 客戶端） |
 
 ### API 請求範例
 
@@ -182,6 +187,208 @@ Content-Type: application/json
   "recorded_at": "2024-01-15T10:30:00Z"
 }
 ```
+
+## 🔌 WebSocket 實時推播
+
+### WebSocket 基本知識
+
+**什麼是 WebSocket？**
+
+WebSocket 是一種通訊協定，允許伺服器與客戶端建立持久性的雙向連線。與傳統的 HTTP 請求-回應模式不同，WebSocket 可以讓伺服器主動推送數據給客戶端，無需客戶端不斷輪詢（Polling）。
+
+**為什麼使用 WebSocket？**
+
+1. **實時性**：數據可以即時推送到所有連線的客戶端
+2. **效率**：避免客戶端頻繁發送 HTTP 請求
+3. **雙向通訊**：伺服器和客戶端都可以主動發送訊息
+4. **低延遲**：建立連線後，數據傳輸延遲極低
+
+**本專案的應用場景**
+
+- 當創建新的遙測數據時，自動推播給所有監聽的客戶端
+- 當更新遙測數據時，自動通知所有客戶端數據變更
+- 適合用於 IoT 儀表板、即時監控系統等場景
+
+### WebSocket 架構設計
+
+本專案採用 **Hub 模式（Hub Pattern）** 來管理 WebSocket 連線：
+
+```
+┌─────────────────────────────────────┐
+│           WebSocket Hub              │
+│  - 管理所有活動連線                  │
+│  - 提供廣播功能                      │
+│  - 線程安全的連線管理                │
+└──────────────┬──────────────────────┘
+               │
+    ┌──────────┼──────────┐
+    │          │          │
+┌───▼───┐  ┌───▼───┐  ┌───▼───┐
+│Client1│  │Client2│  │Client3│
+└───────┘  └───────┘  └───────┘
+```
+
+**核心組件**
+
+1. **Hub** (`api/ws_hub.go`)：管理所有 WebSocket 連線
+2. **Handler** (`api/handlers.go`)：處理 WebSocket 連線升級
+3. **Broadcast**：當遙測數據變更時，自動推播給所有客戶端
+
+### WebSocket 代碼實現
+
+#### 1. Hub 結構 (`api/ws_hub.go`)
+
+```go
+type Hub struct {
+    clients map[*websocket.Conn]bool  // 儲存所有連線中的客戶端
+    mu      sync.Mutex                // 互斥鎖，確保線程安全
+}
+```
+
+**主要方法：**
+
+- `AddClient(conn)`: 註冊新的 WebSocket 連線
+- `RemoveClient(conn)`: 移除並關閉連線
+- `Broadcast(v)`: 將數據推播給所有連線的客戶端
+
+**線程安全設計：**
+
+使用 `sync.Mutex` 確保在多個 goroutine 同時存取 `clients` map 時不會發生競態條件（Race Condition）。
+
+#### 2. WebSocket Handler (`api/handlers.go`)
+
+```go
+var upgrader = websocket.Upgrader{
+    CheckOrigin: func(r *http.Request) bool { return true }, // 允許所有來源連線
+}
+
+func (s *Server) HandleWS(w http.ResponseWriter, r *http.Request) {
+    // 1. 將 HTTP 連線升級為 WebSocket
+    conn, err := upgrader.Upgrade(w, r, nil)
+    
+    // 2. 註冊到 Hub
+    s.Hub.AddClient(conn)
+    
+    // 3. 保持連線，直到客戶端斷開
+    defer s.Hub.RemoveClient(conn)
+    for {
+        if _, _, err := conn.ReadMessage(); err != nil {
+            break
+        }
+    }
+}
+```
+
+#### 3. 自動推播機制
+
+當創建或更新遙測數據時，系統會自動推播給所有 WebSocket 客戶端：
+
+```go
+// 在 HandleCreateTelemetry 中
+s.Hub.Broadcast(ToTelemetryResponse(*telemetry))
+
+// 在 HandlePatchTelemetry 中
+s.Hub.Broadcast(ToTelemetryResponse(*updatedTelemetry))
+```
+
+**推播的數據格式：**
+
+```json
+{
+  "id": 1,
+  "data_type": "Temperature",
+  "value": 25.5,
+  "recorded_at": "2024-01-15T10:30:00Z"
+}
+```
+
+#### 4. Server 整合 (`api/server.go`)
+
+```go
+type Server struct {
+    Router   *chi.Mux
+    Store    store.Storage
+    TaskChan chan uint
+    Hub      *Hub  // WebSocket Hub
+}
+
+func NewServer(store store.Storage) *Server {
+    s := &Server{
+        Router:   chi.NewRouter(),
+        Store:    store,
+        TaskChan: make(chan uint, 100),
+        Hub:      NewHub(),  // 初始化 Hub
+    }
+    // ...
+}
+```
+
+**路由配置：**
+
+```go
+// WebSocket 端點是公開的，不需要認證
+s.Router.Get("/ws", s.HandleWS)
+```
+
+**使用方式：**
+
+1. 在瀏覽器(chrome)安裝Simple WebSocket Client
+3. 點擊「連線」(ws://localhost:8080/ws)按鈕
+4. 使用 API 創建或更新遙測數據，客戶端會自動收到推播訊息
+
+**測試推播功能：**
+
+```bash
+# 1. 確保 WebSocket 客戶端已連線
+
+# 2. 創建新的遙測數據（會自動推播）
+curl -X POST http://localhost:8080/telemetries \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer secret-token-123" \
+  -d '{
+    "device_id": 1,
+    "data_type": "Temperature",
+    "value": 25.5
+  }'
+
+# 3. 更新遙測數據（會自動推播）
+curl -X PATCH http://localhost:8080/telemetries/1 \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer secret-token-123" \
+  -d '{
+    "value": 26.0
+  }'
+```
+
+### WebSocket 連線流程
+
+```
+1. 客戶端發起 WebSocket 連線請求
+   ws://localhost:8080/ws
+   ↓
+2. 伺服器接收 HTTP 請求
+   ↓
+3. Upgrader 將 HTTP 連線升級為 WebSocket
+   ↓
+4. Hub.AddClient() 註冊新連線
+   ↓
+5. 保持連線，等待訊息
+   ↓
+6. 當遙測數據變更時
+   ↓
+7. Hub.Broadcast() 推播給所有客戶端
+   ↓
+8. 客戶端收到 JSON 格式的遙測數據
+   ↓
+9. 客戶端斷線時，Hub.RemoveClient() 清理連線
+```
+
+### 注意事項
+
+1. **跨域設定**：目前 `CheckOrigin` 允許所有來源連線，生產環境應限制允許的來源
+2. **錯誤處理**：推播失敗時會自動移除該連線，避免影響其他客戶端
+3. **連線管理**：使用 `defer` 確保連線關閉時會自動清理
+4. **數據格式**：推播的數據使用 DTO 格式，確保只傳送必要的字段
 
 ## 🔄 代碼流程說明
 
