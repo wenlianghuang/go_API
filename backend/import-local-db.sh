@@ -22,6 +22,21 @@ if ! pg_dump -U postgres -h localhost -d iot_db > /dev/null 2>&1; then
 fi
 
 echo "✅ 发现本地数据库，正在导入..."
+echo "⚠️  警告：这将清空 Docker 数据库中的所有现有数据！"
+read -p "是否继续？(y/N): " -n 1 -r
+echo
+if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+  echo "已取消操作"
+  exit 0
+fi
+
+echo "正在清空 Docker 数据库..."
+docker-compose exec -T postgres psql -U postgres -d iot_db <<EOF
+DROP SCHEMA public CASCADE;
+CREATE SCHEMA public;
+GRANT ALL ON SCHEMA public TO postgres;
+GRANT ALL ON SCHEMA public TO public;
+EOF
 echo "这可能需要一些时间，请稍候..."
 
 # 从本地数据库导出并导入到容器

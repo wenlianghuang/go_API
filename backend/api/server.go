@@ -8,6 +8,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
+	"github.com/redis/go-redis/v9"
 )
 
 // Server 結構體持有所有的依賴 (Router 和 Storage)
@@ -20,11 +21,15 @@ type Server struct {
 
 // NewServer 初始化 Server 並掛載路由
 func NewServer(store store.Storage) *Server {
+	// 1. 初始化 Redis
+	rdb := redis.NewClient(&redis.Options{
+		Addr: "redis:6379", // Docker 內部的 service name
+	})
 	s := &Server{
 		Router:   chi.NewRouter(),
 		Store:    store,
 		TaskChan: make(chan uint, 100), // 設定通道大小為 100
-		Hub:      NewHub(),
+		Hub:      NewHub(rdb),
 	}
 
 	go s.startWorker()

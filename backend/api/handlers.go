@@ -223,7 +223,8 @@ func (s *Server) HandleCreateTelemetry(w http.ResponseWriter, r *http.Request) {
 	}
 
 	WriteJSON(w, http.StatusCreated, telemetry)
-	s.Hub.Broadcast(ToTelemetryResponse(*telemetry)) // 使用 DTO 推播乾淨的數據
+	// 使用 deviceID 發布到具體的 topic (device:{id})
+	s.Hub.BroadcastToDevice(telemetry.DeviceID, ToTelemetryResponse(*telemetry))
 }
 
 // HandleGetTelemetry 處理取得遙測數據的請求
@@ -429,14 +430,54 @@ func (s *Server) HandleWS(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// 註冊客戶端並預設訂閱所有 device:* 頻道
 	s.Hub.AddClient(conn)
 
 	// 保持連線，直到客戶端斷開
 	defer s.Hub.RemoveClient(conn)
+
+	// 處理客戶端訊息（訂閱/取消訂閱等）
 	for {
-		// 這裡可以讀取客戶端傳來的訊息，目前我們先放著讓它維持連線
-		if _, _, err := conn.ReadMessage(); err != nil {
+		messageType, message, err := conn.ReadMessage()
+		if err != nil {
+			// 連接關閉或讀取錯誤
 			break
+		}
+
+		// 處理文字訊息（JSON 格式的訂閱請求）
+		if messageType == websocket.TextMessage {
+			var msg map[string]interface{}
+			if err := json.Unmarshal(message, &msg); err == nil {
+				// 處理訂閱請求
+				if action, ok := msg["action"].(string); ok {
+					switch action {
+					case "subscribe":
+						if topic, ok := msg["topic"].(string); ok {
+							s.Hub.Subscribe(topic, conn)
+							// 回傳確認訊息
+							response := map[string]interface{}{
+								"status": "subscribed",
+								"topic":  topic,
+							}
+							if data, err := json.Marshal(response); err == nil {
+								conn.WriteMessage(websocket.TextMessage, data)
+							}
+						}
+					case "unsubscribe":
+						if topic, ok := msg["topic"].(string); ok {
+							s.Hub.Unsubscribe(topic, conn)
+							// 回傳確認訊息
+							response := map[string]interface{}{
+								"status": "unsubscribed",
+								"topic":  topic,
+							}
+							if data, err := json.Marshal(response); err == nil {
+								conn.WriteMessage(websocket.TextMessage, data)
+							}
+						}
+					}
+				}
+			}
 		}
 	}
 }
@@ -526,7 +567,8 @@ func (s *Server) HandlePatchTelemetry(w http.ResponseWriter, r *http.Request) {
 	}
 
 	WriteJSON(w, http.StatusOK, updatedTelemetry)
-	s.Hub.Broadcast(ToTelemetryResponse(*updatedTelemetry))
+	// 使用 deviceID 發布到具體的 topic (device:{id})
+	s.Hub.BroadcastToDevice(updatedTelemetry.DeviceID, ToTelemetryResponse(*updatedTelemetry))
 }
 
 // Handle Get telemetry
