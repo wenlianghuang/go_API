@@ -5,6 +5,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"sync"
 
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
@@ -51,7 +52,53 @@ func main() {
 	// Server 根本不知道底層換成了 Postgres，這就是介面的威力
 	srv := api.NewServer(gormStore)
 
-	// 7. 啟動
-	fmt.Println("🚀 IoT Server running on :8080")
-	http.ListenAndServe(":8080", srv.Router)
+	// 7. 設定 port（從環境變數讀取，預設值為 8080 和 9090）
+	apiPort := os.Getenv("API_PORT")
+	if apiPort == "" {
+		apiPort = "8080"
+	}
+
+	metricsPort := os.Getenv("METRICS_PORT")
+	if metricsPort == "" {
+		metricsPort = "9090"
+	}
+
+	// 8. 創建組合的 HTTP handler，將 WebSocket 和 API 路由組合
+	// 使用自定義的 handler 來確保 WebSocket 路由優先處理
+	mainHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// WebSocket 路由：優先處理，不經過任何中間件
+		if r.URL.Path == "/ws" {
+			srv.HandleWS(w, r)
+			return
+		}
+		// 其他路由：使用 Chi router（包含所有中間件）
+		srv.Router.ServeHTTP(w, r)
+	})
+
+	// 9. 啟動兩個獨立的 server
+	var wg sync.WaitGroup
+	wg.Add(2)
+
+	// API Server - 處理所有業務請求（包含 WebSocket）
+	go func() {
+		defer wg.Done()
+		fmt.Printf("🚀 API Server running on :%s\n", apiPort)
+		if err := http.ListenAndServe(":"+apiPort, mainHandler); err != nil {
+			log.Fatalf("API Server failed: %v", err)
+		}
+	}()
+
+	// Metrics Server - 只處理 Prometheus metrics 請求
+	go func() {
+		defer wg.Done()
+		metricsMux := http.NewServeMux()
+		metricsMux.Handle("/metrics", api.MetricsHandler())
+		fmt.Printf("📊 Metrics Server running on :%s/metrics\n", metricsPort)
+		if err := http.ListenAndServe(":"+metricsPort, metricsMux); err != nil {
+			log.Fatalf("Metrics Server failed: %v", err)
+		}
+	}()
+
+	// 等待兩個 server（實際上會一直運行）
+	wg.Wait()
 }

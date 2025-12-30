@@ -49,16 +49,22 @@ func (s *Server) startWorker() {
 }
 
 func (s *Server) mountRoutes() {
+	// 注意：WebSocket 路由 (/ws) 不在這裡註冊
+	// 因為 WebSocket 升級需要直接訪問原始 ResponseWriter（實現 http.Hijacker）
+	// Chi 的中間件會包裝 ResponseWriter，導致無法實現 Hijacker 接口
+	// WebSocket 將在 main.go 中使用標準 http.ServeMux 單獨處理
+
+	// 其他中間件（應用於所有其他路由）
 	s.Router.Use(middleware.Logger)
 	s.Router.Use(middleware.Recoverer)
 	s.Router.Use(middleware.RequestID)
+	s.Router.Use(MetricsMiddleware) // Add metrics middleware
 
 	// === 1. 公開路由 (Public Routes) ===
 	// 任何人都可以訪問，不需要 Token
 	s.Router.Get("/", func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte("Welcome to the Mortgage System API"))
 	})
-	s.Router.Get("/ws", s.HandleWS)
 
 	// 假設註冊也是公開的
 	s.Router.Post("/users", s.HandleCreateUser)

@@ -424,6 +424,9 @@ var upgrader = websocket.Upgrader{
 
 // HandleWS 處理 WebSocket 連線
 func (s *Server) HandleWS(w http.ResponseWriter, r *http.Request) {
+	// 記錄 WebSocket 連線建立 metrics（手動記錄，因為繞過了 MetricsMiddleware）
+	RequestCounter.WithLabelValues(r.Method, "/ws", "Switching Protocols").Inc()
+
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		fmt.Printf("❌ WS 升級失敗: %v\n", err)

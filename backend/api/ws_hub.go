@@ -195,6 +195,8 @@ func (h *Hub) AddClient(conn *websocket.Conn) {
 	fmt.Printf("🌐 新的 WebSocket 客戶端已連線\n")
 	// 預設訂閱所有 device:* 頻道，讓客戶端能收到所有設備的訊息
 	h.Subscribe("device:*", conn)
+	// Update metrics
+	ActiveConnections.Inc()
 }
 
 // RemoveClient 移除連線，從所有 topics 中清除該連接
@@ -218,6 +220,8 @@ func (h *Hub) RemoveClient(conn *websocket.Conn) {
 		log.Printf("⚠️ 關閉 WebSocket 連接時發生錯誤: %v", err)
 	}
 	fmt.Printf("🌐 WebSocket 客戶端已斷開，已從所有 topics 中移除\n")
+	// Update metrics
+	ActiveConnections.Dec()
 }
 
 // Broadcast 推播訊息給所有訂閱者（為了向後兼容）
