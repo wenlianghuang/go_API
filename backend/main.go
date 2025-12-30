@@ -13,7 +13,29 @@ import (
 	"my-api/api" // 假設這是你放 Server 的地方
 	"my-api/model"
 	"my-api/store"
+
+	_ "my-api/docs" // swagger docs
 )
+
+// @title           IoT API
+// @version         1.0
+// @description     IoT 設備管理系統 API 文檔
+// @termsOfService  http://swagger.io/terms/
+
+// @contact.name   API Support
+// @contact.url    http://www.swagger.io/support
+// @contact.email  support@swagger.io
+
+// @license.name  Apache 2.0
+// @license.url   http://www.apache.org/licenses/LICENSE-2.0.html
+
+// @host      localhost:8080
+// @BasePath  /
+
+// @securityDefinitions.apikey BearerAuth
+// @in header
+// @name Authorization
+// @description Type "Bearer" followed by a space and JWT token.
 
 func main() {
 	// 1. 設定資料庫連線資訊

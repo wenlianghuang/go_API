@@ -14,14 +14,24 @@ import (
 	"github.com/gorilla/websocket"
 )
 
-// HandleCreateUser 處理建立使用者的請求
-func (s *Server) HandleCreateUser(w http.ResponseWriter, r *http.Request) {
-	// 定義接收前端資料的結構 (DTO)
-	type CreateUserRequest struct {
-		Username string `json:"username"`
-		Email    string `json:"email"`
-	}
+// CreateUserRequest 創建用戶請求結構
+type CreateUserRequest struct {
+	Username string `json:"username" example:"john_doe" binding:"required"`
+	Email    string `json:"email" example:"john@example.com" binding:"required"`
+}
 
+// HandleCreateUser 處理建立使用者的請求
+// @Summary      創建新用戶
+// @Description  創建一個新的用戶帳號
+// @Tags         users
+// @Accept       json
+// @Produce      json
+// @Param        user  body      CreateUserRequest  true  "用戶資訊"
+// @Success      201   {object}  store.User
+// @Failure      400   {object}  ErrorResponse
+// @Failure      500   {object}  ErrorResponse
+// @Router       /users [post]
+func (s *Server) HandleCreateUser(w http.ResponseWriter, r *http.Request) {
 	var req CreateUserRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		WriteError(w, http.StatusBadRequest, "Invalid request payload")
@@ -52,6 +62,16 @@ func (s *Server) HandleCreateUser(w http.ResponseWriter, r *http.Request) {
 }
 
 // HandleListUsers 取得所有使用者
+// @Summary      獲取所有用戶列表
+// @Description  獲取系統中所有用戶的列表
+// @Tags         users
+// @Accept       json
+// @Produce      json
+// @Security     BearerAuth
+// @Success      200  {array}   store.User
+// @Failure      401  {object}  ErrorResponse
+// @Failure      500  {object}  ErrorResponse
+// @Router       /users [get]
 func (s *Server) HandleListUsers(w http.ResponseWriter, r *http.Request) {
 	users, err := s.Store.List()
 	if err != nil {
@@ -62,6 +82,17 @@ func (s *Server) HandleListUsers(w http.ResponseWriter, r *http.Request) {
 }
 
 // HandleGetUser 取得單一使用者
+// @Summary      獲取單個用戶
+// @Description  根據用戶 ID 獲取用戶詳細資訊
+// @Tags         users
+// @Accept       json
+// @Produce      json
+// @Security     BearerAuth
+// @Param        id   path      string  true  "用戶 ID"
+// @Success      200  {object}  store.User
+// @Failure      401  {object}  ErrorResponse
+// @Failure      404  {object}  ErrorResponse
+// @Router       /users/{id} [get]
 func (s *Server) HandleGetUser(w http.ResponseWriter, r *http.Request) {
 	// 從 URL 參數中取得 id
 	id := chi.URLParam(r, "id")
@@ -76,6 +107,15 @@ func (s *Server) HandleGetUser(w http.ResponseWriter, r *http.Request) {
 }
 
 // HandleMe 回傳當前登入者的資訊
+// @Summary      獲取當前用戶資訊
+// @Description  獲取當前已認證用戶的資訊
+// @Tags         users
+// @Accept       json
+// @Produce      json
+// @Security     BearerAuth
+// @Success      200  {object}  map[string]string
+// @Failure      401  {object}  ErrorResponse
+// @Router       /me [get]
 func (s *Server) HandleMe(w http.ResponseWriter, r *http.Request) {
 	// 使用 Helper 安全地取出 ID
 	userID, ok := GetUserIDFromContext(r.Context())
@@ -94,14 +134,28 @@ func (s *Server) HandleMe(w http.ResponseWriter, r *http.Request) {
 	WriteJSON(w, http.StatusOK, response)
 }
 
+// CreateDeviceRequest 創建設備請求結構
+type CreateDeviceRequest struct {
+	Name       string `json:"name" example:"Temperature Sensor 1" binding:"required"`
+	Type       string `json:"type" example:"Sensor"`
+	MacAddress string `json:"mac_address" example:"00:11:22:33:44:55" binding:"required"`
+	IsActive   bool   `json:"is_active" example:"true"`
+}
+
 // HandleCreateDevice 處理建立設備的請求
+// @Summary      創建新設備
+// @Description  創建一個新的 IoT 設備
+// @Tags         devices
+// @Accept       json
+// @Produce      json
+// @Security     BearerAuth
+// @Param        device  body      CreateDeviceRequest  true  "設備資訊"
+// @Success      201     {object}  DeviceResponse
+// @Failure      400     {object}  ErrorResponse
+// @Failure      401     {object}  ErrorResponse
+// @Failure      500     {object}  ErrorResponse
+// @Router       /devices [post]
 func (s *Server) HandleCreateDevice(w http.ResponseWriter, r *http.Request) {
-	type CreateDeviceRequest struct {
-		Name       string `json:"name"`
-		Type       string `json:"type"`
-		MacAddress string `json:"mac_address"`
-		IsActive   bool   `json:"is_active"`
-	}
 
 	var req CreateDeviceRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -138,6 +192,16 @@ func (s *Server) HandleCreateDevice(w http.ResponseWriter, r *http.Request) {
 }
 
 // HandleListDevices 取得所有設備
+// @Summary      獲取所有設備列表
+// @Description  獲取系統中所有 IoT 設備的列表
+// @Tags         devices
+// @Accept       json
+// @Produce      json
+// @Security     BearerAuth
+// @Success      200  {array}   DeviceResponse
+// @Failure      401  {object}  ErrorResponse
+// @Failure      500  {object}  ErrorResponse
+// @Router       /devices [get]
 func (s *Server) HandleListDevices(w http.ResponseWriter, r *http.Request) {
 	devices, err := s.Store.ListDevices()
 	if err != nil {
@@ -148,6 +212,18 @@ func (s *Server) HandleListDevices(w http.ResponseWriter, r *http.Request) {
 }
 
 // HandleGetDevice 取得單一設備
+// @Summary      獲取單個設備
+// @Description  根據設備 ID 獲取設備詳細資訊，包含遙測數據
+// @Tags         devices
+// @Accept       json
+// @Produce      json
+// @Security     BearerAuth
+// @Param        id   path      int  true  "設備 ID"
+// @Success      200  {object}  DeviceResponse
+// @Failure      400  {object}  ErrorResponse
+// @Failure      401  {object}  ErrorResponse
+// @Failure      404  {object}  ErrorResponse
+// @Router       /devices/{id} [get]
 func (s *Server) HandleGetDevice(w http.ResponseWriter, r *http.Request) {
 	// 從 URL 參數中取得 id
 	idStr := chi.URLParam(r, "id")
@@ -168,14 +244,29 @@ func (s *Server) HandleGetDevice(w http.ResponseWriter, r *http.Request) {
 	WriteJSON(w, http.StatusOK, resp)
 }
 
+// CreateTelemetryRequest 創建遙測數據請求結構
+type CreateTelemetryRequest struct {
+	DeviceID   uint    `json:"device_id" example:"1" binding:"required"`
+	DataType   string  `json:"data_type" example:"Temperature" binding:"required"`
+	Value      float64 `json:"value" example:"25.5"`
+	RecordedAt string  `json:"recorded_at,omitempty" example:"2024-01-01T00:00:00Z"` // 可選，如果沒有提供則使用當前時間
+}
+
 // HandleCreateTelemetry 處理建立遙測數據的請求
+// @Summary      創建遙測數據
+// @Description  為指定設備創建新的遙測數據記錄
+// @Tags         telemetries
+// @Accept       json
+// @Produce      json
+// @Security     BearerAuth
+// @Param        telemetry  body      CreateTelemetryRequest  true  "遙測數據資訊"
+// @Success      201        {object}  TelemetryResponse
+// @Failure      400        {object}  ErrorResponse
+// @Failure      401        {object}  ErrorResponse
+// @Failure      404        {object}  ErrorResponse
+// @Failure      500        {object}  ErrorResponse
+// @Router       /telemetries [post]
 func (s *Server) HandleCreateTelemetry(w http.ResponseWriter, r *http.Request) {
-	type CreateTelemetryRequest struct {
-		DeviceID   uint    `json:"device_id"`
-		DataType   string  `json:"data_type"`
-		Value      float64 `json:"value"`
-		RecordedAt string  `json:"recorded_at,omitempty"` // 可選，如果沒有提供則使用當前時間
-	}
 
 	var req CreateTelemetryRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -228,6 +319,18 @@ func (s *Server) HandleCreateTelemetry(w http.ResponseWriter, r *http.Request) {
 }
 
 // HandleGetTelemetry 處理取得遙測數據的請求
+// @Summary      獲取單個遙測數據
+// @Description  根據遙測數據 ID 獲取詳細資訊
+// @Tags         telemetries
+// @Accept       json
+// @Produce      json
+// @Security     BearerAuth
+// @Param        id   path      int  true  "遙測數據 ID"
+// @Success      200  {object}  TelemetryResponse
+// @Failure      400  {object}  ErrorResponse
+// @Failure      401  {object}  ErrorResponse
+// @Failure      404  {object}  ErrorResponse
+// @Router       /telemetries/{id} [get]
 func (s *Server) HandleGetTelemetry(w http.ResponseWriter, r *http.Request) {
 	idStr := chi.URLParam(r, "id")
 	id, err := strconv.ParseUint(idStr, 10, 32)
@@ -244,7 +347,19 @@ func (s *Server) HandleGetTelemetry(w http.ResponseWriter, r *http.Request) {
 	WriteJSON(w, http.StatusOK, telemetry)
 }
 
-// 處理刪除請求
+// HandleDeleteDevice 處理刪除設備請求
+// @Summary      刪除設備
+// @Description  刪除指定設備及其所有相關的遙測數據
+// @Tags         devices
+// @Accept       json
+// @Produce      json
+// @Security     BearerAuth
+// @Param        id   path      int  true  "設備 ID"
+// @Success      200  {object}  map[string]string
+// @Failure      400  {object}  ErrorResponse
+// @Failure      401  {object}  ErrorResponse
+// @Failure      500  {object}  ErrorResponse
+// @Router       /devices/{id} [delete]
 func (s *Server) HandleDeleteDevice(w http.ResponseWriter, r *http.Request) {
 	// 1. 解析 ID
 	idStr := chi.URLParam(r, "id")
@@ -265,14 +380,30 @@ func (s *Server) HandleDeleteDevice(w http.ResponseWriter, r *http.Request) {
 	WriteJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
 }
 
+// UpdateDeviceRequest 更新設備請求結構
+type UpdateDeviceRequest struct {
+	Name       string `json:"name" example:"Temperature Sensor 1" binding:"required"`
+	Type       string `json:"type" example:"Sensor"`
+	MacAddress string `json:"mac_address" example:"00:11:22:33:44:55" binding:"required"`
+	IsActive   bool   `json:"is_active" example:"true"`
+}
+
 // HandleUpdateDevice 處理更新整個設備的請求
+// @Summary      完整更新設備
+// @Description  使用 PUT 方法完整更新設備資訊（所有字段必須提供）
+// @Tags         devices
+// @Accept       json
+// @Produce      json
+// @Security     BearerAuth
+// @Param        id      path      int                 true  "設備 ID"
+// @Param        device  body      UpdateDeviceRequest  true  "設備資訊"
+// @Success      200     {object}  DeviceResponse
+// @Failure      400     {object}  ErrorResponse
+// @Failure      401     {object}  ErrorResponse
+// @Failure      404     {object}  ErrorResponse
+// @Failure      500     {object}  ErrorResponse
+// @Router       /devices/{id} [put]
 func (s *Server) HandleUpdateDevice(w http.ResponseWriter, r *http.Request) {
-	type UpdateDeviceRequest struct {
-		Name       string `json:"name"`
-		Type       string `json:"type"`
-		MacAddress string `json:"mac_address"`
-		IsActive   bool   `json:"is_active"`
-	}
 
 	// 1. 解析 ID
 	idStr := chi.URLParam(r, "id")
@@ -327,14 +458,30 @@ func (s *Server) HandleUpdateDevice(w http.ResponseWriter, r *http.Request) {
 	WriteJSON(w, http.StatusOK, resp)
 }
 
+// PatchDeviceRequest 部分更新設備請求結構
+type PatchDeviceRequest struct {
+	Name       *string `json:"name,omitempty" example:"Temperature Sensor 1"` // 使用指針，nil 表示不更新
+	Type       *string `json:"type,omitempty" example:"Sensor"`
+	MacAddress *string `json:"mac_address,omitempty" example:"00:11:22:33:44:55"`
+	IsActive   *bool   `json:"is_active,omitempty" example:"true"`
+}
+
 // HandlePatchDevice 處理 PATCH 請求 - 部分更新（只需要提供要更新的字段）
+// @Summary      部分更新設備
+// @Description  使用 PATCH 方法部分更新設備資訊（只需提供要更新的字段）
+// @Tags         devices
+// @Accept       json
+// @Produce      json
+// @Security     BearerAuth
+// @Param        id      path      int                 true  "設備 ID"
+// @Param        device  body      PatchDeviceRequest  true  "要更新的設備欄位"
+// @Success      200     {object}  DeviceResponse
+// @Failure      400     {object}  ErrorResponse
+// @Failure      401     {object}  ErrorResponse
+// @Failure      404     {object}  ErrorResponse
+// @Failure      500     {object}  ErrorResponse
+// @Router       /devices/{id} [patch]
 func (s *Server) HandlePatchDevice(w http.ResponseWriter, r *http.Request) {
-	type PatchDeviceRequest struct {
-		Name       *string `json:"name,omitempty"` // 使用指針，nil 表示不更新
-		Type       *string `json:"type,omitempty"`
-		MacAddress *string `json:"mac_address,omitempty"`
-		IsActive   *bool   `json:"is_active,omitempty"`
-	}
 
 	// 1. 解析 ID
 	idStr := chi.URLParam(r, "id")
@@ -404,6 +551,18 @@ func (s *Server) HandlePatchDevice(w http.ResponseWriter, r *http.Request) {
 	WriteJSON(w, http.StatusOK, resp)
 }
 
+// HandleAnalyzeDevice 處理設備分析請求
+// @Summary      分析設備
+// @Description  將設備分析任務加入佇列進行處理
+// @Tags         devices
+// @Accept       json
+// @Produce      json
+// @Security     BearerAuth
+// @Param        id   path      int  true  "設備 ID"
+// @Success      202  {object}  map[string]string
+// @Failure      400  {object}  ErrorResponse
+// @Failure      401  {object}  ErrorResponse
+// @Router       /devices/{id}/analyze [post]
 func (s *Server) HandleAnalyzeDevice(w http.ResponseWriter, r *http.Request) {
 	idStr := chi.URLParam(r, "id")
 	id, _ := strconv.ParseUint(idStr, 10, 32)
@@ -485,14 +644,30 @@ func (s *Server) HandleWS(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// PatchTelemetryRequest 部分更新遙測數據請求結構
+type PatchTelemetryRequest struct {
+	DeviceID   *uint    `json:"device_id,omitempty" example:"1"` // 使用指針，nil 表示不更新
+	DataType   *string  `json:"data_type,omitempty" example:"Temperature"`
+	Value      *float64 `json:"value,omitempty" example:"25.5"`
+	RecordedAt *string  `json:"recorded_at,omitempty" example:"2024-01-01T00:00:00Z"`
+}
+
 // HandlePatchTelemetry 處理 PATCH 請求 - 部分更新遙測數據（只需要提供要更新的字段）
+// @Summary      部分更新遙測數據
+// @Description  使用 PATCH 方法部分更新遙測數據資訊（只需提供要更新的字段）
+// @Tags         telemetries
+// @Accept       json
+// @Produce      json
+// @Security     BearerAuth
+// @Param        id         path      int                   true  "遙測數據 ID"
+// @Param        telemetry  body      PatchTelemetryRequest  true  "要更新的遙測數據欄位"
+// @Success      200        {object}  TelemetryResponse
+// @Failure      400        {object}  ErrorResponse
+// @Failure      401        {object}  ErrorResponse
+// @Failure      404        {object}  ErrorResponse
+// @Failure      500        {object}  ErrorResponse
+// @Router       /telemetries/{id} [patch]
 func (s *Server) HandlePatchTelemetry(w http.ResponseWriter, r *http.Request) {
-	type PatchTelemetryRequest struct {
-		DeviceID   *uint    `json:"device_id,omitempty"` // 使用指針，nil 表示不更新
-		DataType   *string  `json:"data_type,omitempty"`
-		Value      *float64 `json:"value,omitempty"`
-		RecordedAt *string  `json:"recorded_at,omitempty"`
-	}
 
 	// 1. 解析 ID
 	idStr := chi.URLParam(r, "id")

@@ -9,6 +9,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/redis/go-redis/v9"
+	httpSwagger "github.com/swaggo/http-swagger"
 )
 
 // Server 結構體持有所有的依賴 (Router 和 Storage)
@@ -65,6 +66,9 @@ func (s *Server) mountRoutes() {
 	s.Router.Get("/", func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte("Welcome to the Mortgage System API"))
 	})
+
+	// Swagger UI 路由
+	s.Router.Get("/swagger/*", httpSwagger.WrapHandler)
 
 	// 假設註冊也是公開的
 	s.Router.Post("/users", s.HandleCreateUser)

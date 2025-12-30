@@ -1,0 +1,650 @@
+basePath: /
+definitions:
+  api.CreateDeviceRequest:
+    properties:
+      is_active:
+        example: true
+        type: boolean
+      mac_address:
+        example: "00:11:22:33:44:55"
+        type: string
+      name:
+        example: Temperature Sensor 1
+        type: string
+      type:
+        example: Sensor
+        type: string
+    required:
+    - mac_address
+    - name
+    type: object
+  api.CreateTelemetryRequest:
+    properties:
+      data_type:
+        example: Temperature
+        type: string
+      device_id:
+        example: 1
+        type: integer
+      recorded_at:
+        description: 可選，如果沒有提供則使用當前時間
+        example: "2024-01-01T00:00:00Z"
+        type: string
+      value:
+        example: 25.5
+        type: number
+    required:
+    - data_type
+    - device_id
+    type: object
+  api.CreateUserRequest:
+    properties:
+      email:
+        example: john@example.com
+        type: string
+      username:
+        example: john_doe
+        type: string
+    required:
+    - email
+    - username
+    type: object
+  api.DeviceResponse:
+    properties:
+      id:
+        type: integer
+      is_active:
+        type: boolean
+      mac_address:
+        type: string
+      name:
+        type: string
+      telemetries:
+        description: 這裡只放入 DTO 版本的 Telemetry
+        items:
+          $ref: '#/definitions/api.TelemetryResponse'
+        type: array
+      type:
+        type: string
+    type: object
+  api.ErrorResponse:
+    properties:
+      error:
+        type: string
+    type: object
+  api.PatchDeviceRequest:
+    properties:
+      is_active:
+        example: true
+        type: boolean
+      mac_address:
+        example: "00:11:22:33:44:55"
+        type: string
+      name:
+        description: 使用指針，nil 表示不更新
+        example: Temperature Sensor 1
+        type: string
+      type:
+        example: Sensor
+        type: string
+    type: object
+  api.PatchTelemetryRequest:
+    properties:
+      data_type:
+        example: Temperature
+        type: string
+      device_id:
+        description: 使用指針，nil 表示不更新
+        example: 1
+        type: integer
+      recorded_at:
+        example: "2024-01-01T00:00:00Z"
+        type: string
+      value:
+        example: 25.5
+        type: number
+    type: object
+  api.TelemetryResponse:
+    properties:
+      data_type:
+        type: string
+      id:
+        type: integer
+      recorded_at:
+        type: string
+      value:
+        type: number
+    type: object
+  api.UpdateDeviceRequest:
+    properties:
+      is_active:
+        example: true
+        type: boolean
+      mac_address:
+        example: "00:11:22:33:44:55"
+        type: string
+      name:
+        example: Temperature Sensor 1
+        type: string
+      type:
+        example: Sensor
+        type: string
+    required:
+    - mac_address
+    - name
+    type: object
+  store.User:
+    properties:
+      created_at:
+        type: string
+      email:
+        type: string
+      id:
+        type: string
+      username:
+        type: string
+    type: object
+host: localhost:8080
+info:
+  contact:
+    email: support@swagger.io
+    name: API Support
+    url: http://www.swagger.io/support
+  description: IoT 設備管理系統 API 文檔
+  license:
+    name: Apache 2.0
+    url: http://www.apache.org/licenses/LICENSE-2.0.html
+  termsOfService: http://swagger.io/terms/
+  title: IoT API
+  version: "1.0"
+paths:
+  /devices:
+    get:
+      consumes:
+      - application/json
+      description: 獲取系統中所有 IoT 設備的列表
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/api.DeviceResponse'
+            type: array
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 獲取所有設備列表
+      tags:
+      - devices
+    post:
+      consumes:
+      - application/json
+      description: 創建一個新的 IoT 設備
+      parameters:
+      - description: 設備資訊
+        in: body
+        name: device
+        required: true
+        schema:
+          $ref: '#/definitions/api.CreateDeviceRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/api.DeviceResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 創建新設備
+      tags:
+      - devices
+  /devices/{id}:
+    delete:
+      consumes:
+      - application/json
+      description: 刪除指定設備及其所有相關的遙測數據
+      parameters:
+      - description: 設備 ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 刪除設備
+      tags:
+      - devices
+    get:
+      consumes:
+      - application/json
+      description: 根據設備 ID 獲取設備詳細資訊，包含遙測數據
+      parameters:
+      - description: 設備 ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.DeviceResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 獲取單個設備
+      tags:
+      - devices
+    patch:
+      consumes:
+      - application/json
+      description: 使用 PATCH 方法部分更新設備資訊（只需提供要更新的字段）
+      parameters:
+      - description: 設備 ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: 要更新的設備欄位
+        in: body
+        name: device
+        required: true
+        schema:
+          $ref: '#/definitions/api.PatchDeviceRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.DeviceResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 部分更新設備
+      tags:
+      - devices
+    put:
+      consumes:
+      - application/json
+      description: 使用 PUT 方法完整更新設備資訊（所有字段必須提供）
+      parameters:
+      - description: 設備 ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: 設備資訊
+        in: body
+        name: device
+        required: true
+        schema:
+          $ref: '#/definitions/api.UpdateDeviceRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.DeviceResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 完整更新設備
+      tags:
+      - devices
+  /devices/{id}/analyze:
+    post:
+      consumes:
+      - application/json
+      description: 將設備分析任務加入佇列進行處理
+      parameters:
+      - description: 設備 ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "202":
+          description: Accepted
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 分析設備
+      tags:
+      - devices
+  /me:
+    get:
+      consumes:
+      - application/json
+      description: 獲取當前已認證用戶的資訊
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 獲取當前用戶資訊
+      tags:
+      - users
+  /telemetries:
+    post:
+      consumes:
+      - application/json
+      description: 為指定設備創建新的遙測數據記錄
+      parameters:
+      - description: 遙測數據資訊
+        in: body
+        name: telemetry
+        required: true
+        schema:
+          $ref: '#/definitions/api.CreateTelemetryRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/api.TelemetryResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 創建遙測數據
+      tags:
+      - telemetries
+  /telemetries/{id}:
+    get:
+      consumes:
+      - application/json
+      description: 根據遙測數據 ID 獲取詳細資訊
+      parameters:
+      - description: 遙測數據 ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.TelemetryResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 獲取單個遙測數據
+      tags:
+      - telemetries
+    patch:
+      consumes:
+      - application/json
+      description: 使用 PATCH 方法部分更新遙測數據資訊（只需提供要更新的字段）
+      parameters:
+      - description: 遙測數據 ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: 要更新的遙測數據欄位
+        in: body
+        name: telemetry
+        required: true
+        schema:
+          $ref: '#/definitions/api.PatchTelemetryRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.TelemetryResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 部分更新遙測數據
+      tags:
+      - telemetries
+  /users:
+    get:
+      consumes:
+      - application/json
+      description: 獲取系統中所有用戶的列表
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/store.User'
+            type: array
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 獲取所有用戶列表
+      tags:
+      - users
+    post:
+      consumes:
+      - application/json
+      description: 創建一個新的用戶帳號
+      parameters:
+      - description: 用戶資訊
+        in: body
+        name: user
+        required: true
+        schema:
+          $ref: '#/definitions/api.CreateUserRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/store.User'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      summary: 創建新用戶
+      tags:
+      - users
+  /users/{id}:
+    get:
+      consumes:
+      - application/json
+      description: 根據用戶 ID 獲取用戶詳細資訊
+      parameters:
+      - description: 用戶 ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/store.User'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 獲取單個用戶
+      tags:
+      - users
+securityDefinitions:
+  BearerAuth:
+    description: Type "Bearer" followed by a space and JWT token.
+    in: header
+    name: Authorization
+    type: apiKey
+swagger: "2.0"
