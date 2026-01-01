@@ -133,10 +133,75 @@ definitions:
     - mac_address
     - name
     type: object
-  store.User:
+  gorm.DeletedAt:
+    properties:
+      time:
+        type: string
+      valid:
+        description: Valid is true if Time is not NULL
+        type: boolean
+    type: object
+  model.Device:
+    properties:
+      createdAt:
+        type: string
+      deletedAt:
+        $ref: '#/definitions/gorm.DeletedAt'
+      id:
+        type: integer
+      isActive:
+        type: boolean
+      macAddress:
+        description: 唯一索引
+        type: string
+      name:
+        description: 使用 struct tags 定義資料庫欄位特性
+        type: string
+      telemetries:
+        description: 這裡展示 GORM 的關聯：一對多 (One Device has many Telemetry data)
+        items:
+          $ref: '#/definitions/model.Telemetry'
+        type: array
+      type:
+        description: e.g., "Sensor", "Camera"
+        type: string
+      updatedAt:
+        type: string
+      userID:
+        description: Foreign key to link to a User
+        type: string
+    type: object
+  model.Telemetry:
+    properties:
+      createdAt:
+        type: string
+      dataType:
+        description: e.g., "Temperature", "Humidity"
+        type: string
+      deletedAt:
+        $ref: '#/definitions/gorm.DeletedAt'
+      deviceID:
+        description: 外鍵
+        type: integer
+      id:
+        type: integer
+      recordedAt:
+        type: string
+      updatedAt:
+        type: string
+      value:
+        format: float64
+        type: number
+    type: object
+  model.User:
     properties:
       created_at:
         type: string
+      devices:
+        description: A user can have multiple devices
+        items:
+          $ref: '#/definitions/model.Device'
+        type: array
       email:
         type: string
       id:
@@ -566,7 +631,7 @@ paths:
           description: OK
           schema:
             items:
-              $ref: '#/definitions/store.User'
+              $ref: '#/definitions/model.User'
             type: array
         "401":
           description: Unauthorized
@@ -598,7 +663,7 @@ paths:
         "201":
           description: Created
           schema:
-            $ref: '#/definitions/store.User'
+            $ref: '#/definitions/model.User'
         "400":
           description: Bad Request
           schema:
@@ -627,7 +692,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/store.User'
+            $ref: '#/definitions/model.User'
         "401":
           description: Unauthorized
           schema:

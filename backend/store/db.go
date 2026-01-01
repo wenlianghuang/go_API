@@ -3,24 +3,16 @@ package store
 import (
 	"fmt"
 	"my-api/model"
+	"reflect"
 	"sync"
-	"time"
 )
-
-// User 是我們的資料模型
-type User struct {
-	ID        string    `json:"id"`
-	Username  string    `json:"username"`
-	Email     string    `json:"email"`
-	CreatedAt time.Time `json:"created_at"`
-}
 
 // Storage 定義了資料庫的行為 (Interface)，這是為了以後可以隨時換成 Postgres/MySQL
 type Storage interface {
 	// User 相關
-	Create(u User) error
-	Get(id string) (User, error)
-	List() ([]User, error)
+	Create(u model.User) error
+	Get(id string) (model.User, error)
+	List() ([]model.User, error)
 
 	// 設備相關
 	CreateDevice(dev *model.Device) error
@@ -43,17 +35,25 @@ type Storage interface {
 
 // MemoryStore 是 Storage 的一個實作 (存在記憶體中)
 type MemoryStore struct {
-	mu    sync.RWMutex
-	users map[string]User
+	mu          sync.RWMutex
+	users       map[string]model.User
+	devices     map[uint]*model.Device
+	telemetries map[uint]*model.Telemetry
+	nextDeviceID uint
+	nextTelemetryID uint
 }
 
 func NewMemoryStore() *MemoryStore {
 	return &MemoryStore{
-		users: make(map[string]User),
+		users:       make(map[string]model.User),
+		devices:     make(map[uint]*model.Device),
+		telemetries: make(map[uint]*model.Telemetry),
+		nextDeviceID: 1,
+		nextTelemetryID: 1,
 	}
 }
 
-func (s *MemoryStore) Create(u User) error {
+func (s *MemoryStore) Create(u model.User) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -64,24 +64,142 @@ func (s *MemoryStore) Create(u User) error {
 	return nil
 }
 
-func (s *MemoryStore) Get(id string) (User, error) {
+func (s *MemoryStore) Get(id string) (model.User, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
 	user, ok := s.users[id]
 	if !ok {
-		return User{}, fmt.Errorf("user not found")
+		return model.User{}, fmt.Errorf("user not found")
 	}
 	return user, nil
 }
 
-func (s *MemoryStore) List() ([]User, error) {
+func (s *MemoryStore) List() ([]model.User, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	var users []User
+	var users []model.User
 	for _, u := range s.users {
 		users = append(users, u)
 	}
 	return users, nil
+}
+
+func (s *MemoryStore) CreateDevice(dev *model.Device) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	dev.ID = s.nextDeviceID
+	s.devices[dev.ID] = dev
+	s.nextDeviceID++
+	return nil
+}
+
+func (s *MemoryStore) GetDeviceByID(id uint) (*model.Device, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	dev, ok := s.devices[id]
+	if !ok {
+		return nil, fmt.Errorf("device not found")
+	}
+	return dev, nil
+}
+
+func (s *MemoryStore) ListDevices() ([]model.Device, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	var devices []model.Device
+	for _, dev := range s.devices {
+		devices = append(devices, *dev)
+	}
+	return devices, nil
+}
+
+func (s *MemoryStore) DeleteDeviceWithAllData(id uint) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if _, ok := s.devices[id]; !ok {
+		return fmt.Errorf("device not found")
+	}
+	delete(s.devices, id)
+	// Also delete associated telemetry
+	for tid, tel := range s.telemetries {
+		if tel.DeviceID == id {
+			delete(s.telemetries, tid)
+		}
+	}
+	return nil
+}
+
+func (s *MemoryStore) UpdateDevice(id uint, device *model.Device) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if _, ok := s.devices[id]; !ok {
+		return fmt.Errorf("device not found")
+	}
+	device.ID = id
+	s.devices[id] = device
+	return nil
+}
+
+func (s *MemoryStore) PatchDevice(id uint, updates map[string]interface{}) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	dev, ok := s.devices[id]
+	if !ok {
+		return fmt.Errorf("device not found")
+	}
+	// This is a simplified implementation of patch
+	for k, v := range updates {
+		// Use reflection to update fields, this is a simple version
+		field := reflect.ValueOf(dev).Elem().FieldByName(k)
+		if field.IsValid() && field.CanSet() {
+			val := reflect.ValueOf(v)
+			if field.Type() == val.Type() {
+				field.Set(val)
+			}
+		}
+	}
+	s.devices[id] = dev
+	return nil
+}
+
+func (s *MemoryStore) AddTelemetry(data *model.Telemetry) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	data.ID = s.nextTelemetryID
+	s.telemetries[data.ID] = data
+	s.nextTelemetryID++
+	return nil
+}
+
+func (s *MemoryStore) GetTelemetryByID(id uint) (*model.Telemetry, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	tel, ok := s.telemetries[id]
+	if !ok {
+		return nil, fmt.Errorf("telemetry not found")
+	}
+	return tel, nil
+}
+
+func (s *MemoryStore) PatchTelemetry(id uint, updates map[string]interface{}) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	tel, ok := s.telemetries[id]
+	if !ok {
+		return fmt.Errorf("telemetry not found")
+	}
+	// Simplified patch implementation
+	for k, v := range updates {
+		field := reflect.ValueOf(tel).Elem().FieldByName(k)
+		if field.IsValid() && field.CanSet() {
+			val := reflect.ValueOf(v)
+			if field.Type() == val.Type() {
+				field.Set(val)
+			}
+		}
+	}
+	s.telemetries[id] = tel
+	return nil
 }

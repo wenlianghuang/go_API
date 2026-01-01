@@ -55,7 +55,7 @@ func main() {
 	// 3. 自動遷移 (Auto Migration) - GORM 神技
 	// 這行程式碼會自動在資料庫建立 devices 和 telemetries 資料表
 	// 甚至當你修改 struct 欄位時，它也會試著幫你修改表結構
-	if err := db.AutoMigrate(&model.Device{}, &model.Telemetry{}); err != nil {
+	if err := db.AutoMigrate(&model.Device{}, &model.Telemetry{}, &model.User{}); err != nil {
 		log.Fatalf("資料庫遷移失敗: %v", err)
 	}
 
@@ -68,11 +68,17 @@ func main() {
 	sqlDB.SetMaxOpenConns(100) // 高流量時最多開100個連線
 
 	// 5. 初始化 Store (使用 GormStore)
-	gormStore := store.NewGormStore(db)
+	gormStore, err := store.NewGormStore(db)
+	if err != nil {
+		log.Fatalf("無法初始化 GormStore: %v", err)
+	}
 
-	// 6. 初始化 Server (注入 GormStore)
-	// Server 根本不知道底層換成了 Postgres，這就是介面的威力
-	srv := api.NewServer(gormStore)
+	// 6. 初始化 Server (注入 GormStore 和 Redis 位址)
+	redisAddr := os.Getenv("REDIS_ADDR")
+	if redisAddr == "" {
+		redisAddr = "localhost:6379" // 本地開發預設值
+	}
+	srv := api.NewServer(gormStore, redisAddr)
 
 	// 7. 設定 port（從環境變數讀取，預設值為 8080 和 9090）
 	apiPort := os.Getenv("API_PORT")

@@ -662,7 +662,7 @@
                         "schema": {
                             "type": "array",
                             "items": {
-                                "$ref": "#/definitions/store.User"
+                                "$ref": "#/definitions/model.User"
                             }
                         }
                     },
@@ -707,7 +707,7 @@
                     "201": {
                         "description": "Created",
                         "schema": {
-                            "$ref": "#/definitions/store.User"
+                            "$ref": "#/definitions/model.User"
                         }
                     },
                     "400": {
@@ -756,7 +756,7 @@
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/store.User"
+                            "$ref": "#/definitions/model.User"
                         }
                     },
                     "401": {
@@ -965,11 +965,105 @@
                 }
             }
         },
-        "store.User": {
+        "gorm.DeletedAt": {
+            "type": "object",
+            "properties": {
+                "time": {
+                    "type": "string"
+                },
+                "valid": {
+                    "description": "Valid is true if Time is not NULL",
+                    "type": "boolean"
+                }
+            }
+        },
+        "model.Device": {
+            "type": "object",
+            "properties": {
+                "createdAt": {
+                    "type": "string"
+                },
+                "deletedAt": {
+                    "$ref": "#/definitions/gorm.DeletedAt"
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "isActive": {
+                    "type": "boolean"
+                },
+                "macAddress": {
+                    "description": "唯一索引",
+                    "type": "string"
+                },
+                "name": {
+                    "description": "使用 struct tags 定義資料庫欄位特性",
+                    "type": "string"
+                },
+                "telemetries": {
+                    "description": "這裡展示 GORM 的關聯：一對多 (One Device has many Telemetry data)",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/model.Telemetry"
+                    }
+                },
+                "type": {
+                    "description": "e.g., \"Sensor\", \"Camera\"",
+                    "type": "string"
+                },
+                "updatedAt": {
+                    "type": "string"
+                },
+                "userID": {
+                    "description": "Foreign key to link to a User",
+                    "type": "string"
+                }
+            }
+        },
+        "model.Telemetry": {
+            "type": "object",
+            "properties": {
+                "createdAt": {
+                    "type": "string"
+                },
+                "dataType": {
+                    "description": "e.g., \"Temperature\", \"Humidity\"",
+                    "type": "string"
+                },
+                "deletedAt": {
+                    "$ref": "#/definitions/gorm.DeletedAt"
+                },
+                "deviceID": {
+                    "description": "外鍵",
+                    "type": "integer"
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "recordedAt": {
+                    "type": "string"
+                },
+                "updatedAt": {
+                    "type": "string"
+                },
+                "value": {
+                    "type": "number",
+                    "format": "float64"
+                }
+            }
+        },
+        "model.User": {
             "type": "object",
             "properties": {
                 "created_at": {
                     "type": "string"
+                },
+                "devices": {
+                    "description": "A user can have multiple devices",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/model.Device"
+                    }
                 },
                 "email": {
                     "type": "string"

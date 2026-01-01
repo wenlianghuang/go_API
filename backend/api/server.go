@@ -21,10 +21,10 @@ type Server struct {
 }
 
 // NewServer 初始化 Server 並掛載路由
-func NewServer(store store.Storage) *Server {
+func NewServer(store store.Storage, redisAddr string) *Server {
 	// 1. 初始化 Redis
 	rdb := redis.NewClient(&redis.Options{
-		Addr: "redis:6379", // Docker 內部的 service name
+		Addr: redisAddr, // 使用傳入的 Redis 位址
 	})
 	s := &Server{
 		Router:   chi.NewRouter(),
