@@ -132,5 +132,3 @@ func TestHandleCreateUser(t *testing.T) {
 		})
 	}
 }
-
-// backend/main_test.go
