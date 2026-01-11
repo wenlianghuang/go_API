@@ -1,11 +1,15 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"net/http"
 	"os"
+	"os/signal"
 	"sync"
+	"syscall"
+	"time"
 
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
@@ -53,9 +57,11 @@ func main() {
 	fmt.Println("✅ 成功連接到 PostgreSQL")
 
 	// 3. 自動遷移 (Auto Migration) - GORM 神技
-	// 這行程式碼會自動在資料庫建立 devices 和 telemetries 資料表
-	// 甚至當你修改 struct 欄位時，它也會試著幫你修改表結構
-	if err := db.AutoMigrate(&model.Device{}, &model.Telemetry{}, &model.User{}); err != nil {
+	// 這行程式碼會自動在資料庫建立 users, devices 和 telemetries 資料表
+	// ⚠️ 注意順序：必須先遷移 User（被引用的表），再遷移 Device（引用 User 的表）
+	// 因為 Device 有外鍵 UserID 引用 User.ID，Telemetry 有外鍵 DeviceID 引用 Device.ID
+	// 正確的依賴順序：User → Device → Telemetry
+	if err := db.AutoMigrate(&model.User{}, &model.Device{}, &model.Telemetry{}); err != nil {
 		log.Fatalf("資料庫遷移失敗: %v", err)
 	}
 
@@ -103,7 +109,32 @@ func main() {
 		srv.Router.ServeHTTP(w, r)
 	})
 
-	// 9. 啟動兩個獨立的 server
+	// 9. 創建 HTTP Server 實例（使用 http.Server 物件）
+	apiServer := &http.Server{
+		Addr:         ":" + apiPort,
+		Handler:      mainHandler,
+		ReadTimeout:  15 * time.Second,
+		WriteTimeout: 15 * time.Second,
+		IdleTimeout:  60 * time.Second,
+	}
+
+	metricsMux := http.NewServeMux()
+	metricsMux.Handle("/metrics", api.MetricsHandler())
+	metricsServer := &http.Server{
+		Addr:         ":" + metricsPort,
+		Handler:      metricsMux,
+		ReadTimeout:  10 * time.Second,
+		WriteTimeout: 10 * time.Second,
+		IdleTimeout:  60 * time.Second,
+	}
+
+	// 10. 設定系統信號監聽
+	// 創建一個 channel 來接收系統信號
+	quit := make(chan os.Signal, 1)
+	// 監聽 SIGINT (Ctrl+C) 和 SIGTERM (Docker/K8s stop)
+	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+
+	// 11. 啟動兩個獨立的 server（使用 goroutine）
 	var wg sync.WaitGroup
 	wg.Add(2)
 
@@ -111,7 +142,7 @@ func main() {
 	go func() {
 		defer wg.Done()
 		fmt.Printf("🚀 API Server running on :%s\n", apiPort)
-		if err := http.ListenAndServe(":"+apiPort, mainHandler); err != nil {
+		if err := apiServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			log.Fatalf("API Server failed: %v", err)
 		}
 	}()
@@ -119,14 +150,69 @@ func main() {
 	// Metrics Server - 只處理 Prometheus metrics 請求
 	go func() {
 		defer wg.Done()
-		metricsMux := http.NewServeMux()
-		metricsMux.Handle("/metrics", api.MetricsHandler())
 		fmt.Printf("📊 Metrics Server running on :%s/metrics\n", metricsPort)
-		if err := http.ListenAndServe(":"+metricsPort, metricsMux); err != nil {
+		if err := metricsServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			log.Fatalf("Metrics Server failed: %v", err)
 		}
 	}()
 
-	// 等待兩個 server（實際上會一直運行）
-	wg.Wait()
+	// 12. 阻塞等待系統信號
+	sig := <-quit
+	fmt.Printf("\n🛑 收到停機信號: %v\n", sig)
+	fmt.Println("⏳ 開始優雅停機流程...")
+
+	// 13. 創建帶超時的 context（給予 30 秒完成停機）
+	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer shutdownCancel()
+
+	// 14. 並行關閉兩個服務器
+	var shutdownWg sync.WaitGroup
+	shutdownWg.Add(2)
+
+	// 關閉 API Server（包含背景任務）
+	go func() {
+		defer shutdownWg.Done()
+		fmt.Println("🔄 正在關閉 API Server...")
+
+		// 🆕 步驟 1：先關閉 HTTP Server（停止接受新請求）
+		if err := apiServer.Shutdown(shutdownCtx); err != nil {
+			log.Printf("❌ HTTP Server 停機失敗: %v", err)
+		} else {
+			fmt.Println("✅ HTTP Server 已安全關閉")
+		}
+
+		// 🆕 步驟 2：再關閉 Server 的背景任務（Worker + WebSocket Hub）
+		// 這會關閉：
+		// - Background Worker（處理設備分析任務）
+		// - WebSocket Hub（包括所有 WebSocket 連接）
+		// - Redis 監聽器
+		// - Redis 連接
+		if err := srv.Shutdown(shutdownCtx); err != nil {
+			log.Printf("❌ Server 背景任務停機失敗: %v", err)
+		}
+	}()
+
+	// 關閉 Metrics Server
+	go func() {
+		defer shutdownWg.Done()
+		fmt.Println("🔄 正在關閉 Metrics Server...")
+		if err := metricsServer.Shutdown(shutdownCtx); err != nil {
+			log.Printf("❌ Metrics Server 停機失敗: %v", err)
+		} else {
+			fmt.Println("✅ Metrics Server 已安全關閉")
+		}
+	}()
+
+	// 等待所有服務器完成關閉
+	shutdownWg.Wait()
+
+	// 15. 關閉資料庫連線
+	fmt.Println("🔄 正在關閉資料庫連線...")
+	if err := sqlDB.Close(); err != nil {
+		log.Printf("❌ 資料庫關閉失敗: %v", err)
+	} else {
+		fmt.Println("✅ 資料庫連線已關閉")
+	}
+
+	fmt.Println("👋 程式已完全停止")
 }

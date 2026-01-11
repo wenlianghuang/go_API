@@ -1,9 +1,11 @@
 package api
 
 import (
+	"context"
 	"fmt"
 	"my-api/store"
 	"net/http"
+	"sync"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -18,6 +20,11 @@ type Server struct {
 	Store    store.Storage // 注意：這裡依賴的是 Storage Interface，而不是具體的 struct
 	TaskChan chan uint     // 存放設備 ID 的任務通道
 	Hub      *Hub          // 存放 WebSocket 的 Hub
+
+	// 🆕 優雅停機支援
+	workerWg     sync.WaitGroup     // 用於等待 worker goroutine 完成
+	workerCtx    context.Context    // 控制 worker 的生命週期
+	workerCancel context.CancelFunc // 用於取消 context，觸發 worker 停機
 }
 
 // NewServer 初始化 Server 並掛載路由
@@ -26,13 +33,21 @@ func NewServer(store store.Storage, redisAddr string) *Server {
 	rdb := redis.NewClient(&redis.Options{
 		Addr: redisAddr, // 使用傳入的 Redis 位址
 	})
+
+	// 🆕 創建可取消的 context，用於控制 worker 停機
+	ctx, cancel := context.WithCancel(context.Background())
+
 	s := &Server{
-		Router:   chi.NewRouter(),
-		Store:    store,
-		TaskChan: make(chan uint, 100), // 設定通道大小為 100
-		Hub:      NewHub(rdb),
+		Router:       chi.NewRouter(),
+		Store:        store,
+		TaskChan:     make(chan uint, 100), // 設定通道大小為 100
+		Hub:          NewHub(rdb),
+		workerCtx:    ctx,    // 🆕 儲存 context
+		workerCancel: cancel, // 🆕 儲存 cancel 函數
 	}
 
+	// 🆕 使用 WaitGroup 追蹤 worker goroutine，以便停機時等待
+	s.workerWg.Add(1)
 	go s.startWorker()
 
 	s.mountRoutes()
@@ -40,12 +55,38 @@ func NewServer(store store.Storage, redisAddr string) *Server {
 }
 
 // startWorker 是一個永遠在背景運行的消費者
+// 🆕 支援優雅停機：當 s.workerCtx 被取消或 TaskChan 關閉時，會自動退出
 func (s *Server) startWorker() {
+	// 🆕 確保在函數退出時標記 WaitGroup 完成
+	defer s.workerWg.Done()
 	fmt.Println("👷 Worker 已啟動，等待任務中...")
-	for id := range s.TaskChan { // 不斷從通道拿 ID
-		fmt.Printf("👷 Worker 正在處理設備 ID: %d\n", id)
-		time.Sleep(5 * time.Second) // 模擬耗時計算
-		fmt.Printf("👷 Worker 處理 ID: %d 完成\n", id)
+
+	// 🆕 使用 select 監聽 context 取消信號和任務通道
+	for {
+		select {
+		case <-s.workerCtx.Done():
+			// 🆕 收到停機信號，處理完 channel 中剩餘的任務後退出
+			fmt.Println("🛑 Worker 收到停機信號，處理剩餘任務中...")
+			// 持續從 TaskChan 讀取，直到 channel 被關閉
+			for id := range s.TaskChan {
+				fmt.Printf("👷 Worker 正在處理剩餘任務，設備 ID: %d\n", id)
+				time.Sleep(5 * time.Second) // 模擬耗時計算
+				fmt.Printf("👷 Worker 處理 ID: %d 完成\n", id)
+			}
+			fmt.Println("✅ Worker 已處理完所有剩餘任務")
+			return
+
+		case id, ok := <-s.TaskChan:
+			// 🆕 檢查 channel 是否已關閉
+			if !ok {
+				fmt.Println("✅ TaskChan 已關閉，Worker 退出")
+				return
+			}
+			// 正常處理任務
+			fmt.Printf("👷 Worker 正在處理設備 ID: %d\n", id)
+			time.Sleep(5 * time.Second) // 模擬耗時計算
+			fmt.Printf("👷 Worker 處理 ID: %d 完成\n", id)
+		}
 	}
 }
 
@@ -103,4 +144,52 @@ func (s *Server) mountRoutes() {
 		r.Post("/devices/{id}/analyze", s.HandleAnalyzeDevice)
 
 	})
+}
+
+// 🆕 Shutdown 優雅停機：關閉所有背景任務
+// 此方法會按順序：
+// 1. 通知 worker 不再接受新任務（取消 context）
+// 2. 關閉 TaskChan，讓 worker 知道不會有新任務了
+// 3. 等待 worker 處理完現有任務
+// 4. 關閉 WebSocket Hub（包括所有連接和 Redis 監聽器）
+// 5. 關閉 Redis 連接
+func (s *Server) Shutdown(ctx context.Context) error {
+	fmt.Println("🔄 正在關閉 Server 背景任務...")
+
+	// 步驟 1：取消 worker context，通知不再接受新任務
+	s.workerCancel()
+
+	// 步驟 2：關閉 TaskChan（讓 worker 知道不會有新任務了）
+	close(s.TaskChan)
+
+	// 步驟 3：等待 worker 完成（帶超時保護）
+	workerDone := make(chan struct{})
+	go func() {
+		s.workerWg.Wait() // 等待所有 worker goroutine 完成
+		close(workerDone)
+	}()
+
+	select {
+	case <-workerDone:
+		fmt.Println("✅ Worker 已安全關閉")
+	case <-ctx.Done():
+		// 超時了，但我們會繼續關閉其他組件
+		fmt.Println("⚠️ Worker 停機超時（但已發送停止信號）")
+	}
+
+	// 步驟 4：關閉 WebSocket Hub（包括所有連接和 Redis 監聽器）
+	if err := s.Hub.Shutdown(ctx); err != nil {
+		// 記錄錯誤但繼續關閉流程
+		fmt.Printf("⚠️ Hub 停機時發生錯誤: %v\n", err)
+	}
+
+	// 步驟 5：關閉 Redis 連接
+	fmt.Println("🔄 正在關閉 Redis 連接...")
+	if err := s.Hub.rdb.Close(); err != nil {
+		return fmt.Errorf("Redis 關閉失敗: %w", err)
+	}
+	fmt.Println("✅ Redis 連接已關閉")
+
+	fmt.Println("✅ Server 背景任務已全部關閉")
+	return nil
 }
