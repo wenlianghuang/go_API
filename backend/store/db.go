@@ -35,20 +35,20 @@ type Storage interface {
 
 // MemoryStore 是 Storage 的一個實作 (存在記憶體中)
 type MemoryStore struct {
-	mu          sync.RWMutex
-	users       map[string]model.User
-	devices     map[uint]*model.Device
-	telemetries map[uint]*model.Telemetry
-	nextDeviceID uint
+	mu              sync.RWMutex
+	users           map[string]model.User
+	devices         map[uint]*model.Device
+	telemetries     map[uint]*model.Telemetry
+	nextDeviceID    uint
 	nextTelemetryID uint
 }
 
 func NewMemoryStore() *MemoryStore {
 	return &MemoryStore{
-		users:       make(map[string]model.User),
-		devices:     make(map[uint]*model.Device),
-		telemetries: make(map[uint]*model.Telemetry),
-		nextDeviceID: 1,
+		users:           make(map[string]model.User),
+		devices:         make(map[uint]*model.Device),
+		telemetries:     make(map[uint]*model.Telemetry),
+		nextDeviceID:    1,
 		nextTelemetryID: 1,
 	}
 }

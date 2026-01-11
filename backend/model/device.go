@@ -13,7 +13,7 @@ type Device struct {
 
 	// 使用 struct tags 定義資料庫欄位特性
 	Name       string `gorm:"size:255;not null"`
-	Type       string `gorm:"size:50"`                     // e.g., "Sensor", "Camera"
+	Type       string `gorm:"size:50"`              // e.g., "Sensor", "Camera"
 	MacAddress string `gorm:"uniqueIndex;not null"` // 唯一索引
 	IsActive   bool   `gorm:"default:true"`
 	UserID     string // Foreign key to link to a User
@@ -25,8 +25,8 @@ type Device struct {
 // Telemetry 代表設備傳回的數據點
 type Telemetry struct {
 	gorm.Model
-	DeviceID   uint      // 外鍵
-	DataType   string    // e.g., "Temperature", "Humidity"
-	Value      float64   
-	RecordedAt time.Time 
+	DeviceID   uint   // 外鍵
+	DataType   string // e.g., "Temperature", "Humidity"
+	Value      float64
+	RecordedAt time.Time
 }

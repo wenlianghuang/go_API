@@ -27,10 +27,10 @@ type Hub struct {
 	redisPatterns []string
 
 	// 🆕 優雅停機支援
-	pubsub *redis.PubSub          // Redis 訂閱對象，用於關閉
-	ctx    context.Context        // 控制 Redis 監聽器的生命週期
-	cancel context.CancelFunc     // 用於取消 context，觸發停機
-	wg     sync.WaitGroup         // 用於等待 goroutine 完成
+	pubsub *redis.PubSub      // Redis 訂閱對象，用於關閉
+	ctx    context.Context    // 控制 Redis 監聽器的生命週期
+	cancel context.CancelFunc // 用於取消 context，觸發停機
+	wg     sync.WaitGroup     // 用於等待 goroutine 完成
 }
 
 func NewHub(rdb *redis.Client) *Hub {

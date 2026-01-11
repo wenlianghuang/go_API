@@ -177,4 +177,3 @@ func (s *GormStore) PatchTelemetry(id uint, updates map[string]interface{}) erro
 	}
 	return nil
 }
-
