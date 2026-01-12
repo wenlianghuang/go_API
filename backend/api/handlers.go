@@ -317,6 +317,26 @@ func (s *Server) HandleCreateTelemetry(w http.ResponseWriter, r *http.Request) {
 	s.Hub.BroadcastToDevice(telemetry.DeviceID, ToTelemetryResponse(*telemetry))
 }
 
+// HandleListTelemetries 處理取得所有遙測數據的請求
+// @Summary      獲取所有遙測數據列表
+// @Description  獲取系統中所有遙測數據的列表
+// @Tags         telemetries
+// @Accept       json
+// @Produce      json
+// @Security     BearerAuth
+// @Success      200  {array}  TelemetryResponse
+// @Failure      401  {object}  ErrorResponse
+// @Failure      500  {object}  ErrorResponse
+// @Router       /telemetries [get]
+func (s *Server) HandleListTelemetries(w http.ResponseWriter, r *http.Request) {
+	telemetries, err := s.Store.ListTelemetries()
+	if err != nil {
+		WriteError(w, http.StatusInternalServerError, "Failed to fetch telemetries")
+		return
+	}
+	WriteJSON(w, http.StatusOK, telemetries)
+}
+
 // HandleGetTelemetry 處理取得遙測數據的請求
 // @Summary      獲取單個遙測數據
 // @Description  根據遙測數據 ID 獲取詳細資訊

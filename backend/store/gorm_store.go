@@ -84,6 +84,15 @@ func (s *GormStore) AddTelemetry(data *model.Telemetry) error {
 	return s.db.Create(data).Error
 }
 
+// ListTelemetries 實作列表查詢遙測數據
+func (s *GormStore) ListTelemetries() ([]model.Telemetry, error) {
+	var telemetries []model.Telemetry
+	if err := s.db.Find(&telemetries).Error; err != nil {
+		return nil, err
+	}
+	return telemetries, nil
+}
+
 // GetTelemetryByID 實作查詢單一遙測數據
 func (s *GormStore) GetTelemetryByID(id uint) (*model.Telemetry, error) {
 	var telemetry model.Telemetry

@@ -35,6 +35,7 @@ func (m *MockStore) List() ([]model.User, error)       { return nil, nil }
 func (m *MockStore) CreateDevice(dev *model.Device) error               { return nil }
 func (m *MockStore) GetDeviceByID(id uint) (*model.Device, error)       { return nil, nil }
 func (m *MockStore) ListDevices() ([]model.Device, error)               { return nil, nil }
+func (m *MockStore) ListTelemetries() ([]model.Telemetry, error)        { return nil, nil }
 func (m *MockStore) AddTelemetry(data *model.Telemetry) error           { return nil }
 func (m *MockStore) GetTelemetryByID(id uint) (*model.Telemetry, error) { return nil, nil }
 func (m *MockStore) DeleteDeviceWithAllData(id uint) error {
