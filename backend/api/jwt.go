@@ -2,14 +2,22 @@ package api
 
 import (
 	"errors"
+	"os"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
 )
 
 // JWTSecret 用於簽署 JWT 的密鑰
-// ⚠️ 在生產環境中，這應該從環境變數或配置檔讀取，而不是硬編碼
-const JWTSecret = "your-secret-key-change-this-in-production"
+var JWTSecret = getJWTSecret()
+
+func getJWTSecret() string {
+	secret := os.Getenv("JWT_SECRET")
+	if secret == "" {
+		panic("JWT_SECRET is not set")
+	}
+	return secret
+}
 
 // Claims 定義 JWT 的 payload 結構
 type Claims struct {
@@ -24,12 +32,12 @@ type Claims struct {
 //   - userID: 用戶 ID
 //   - username: 用戶名
 //   - email: 用戶郵箱
-//   - expirationMinutes: token 過期時間（分鐘）
+//   - expirationHours: token 過期時間（小時）
 //
 // 返回：JWT token 字符串
-func GenerateJWT(userID, username, email string, expirationMinutes int) (string, error) {
+func GenerateJWT(userID, username, email string, expirationHours int) (string, error) {
 	// 設定過期時間
-	expirationTime := time.Now().Add(time.Duration(expirationMinutes) * time.Minute)
+	expirationTime := time.Now().Add(time.Duration(expirationHours) * time.Hour)
 
 	// 創建 Claims
 	claims := &Claims{
@@ -93,7 +101,7 @@ func RefreshJWT(oldTokenString string) (string, error) {
 		return "", err
 	}
 
-	// 生成新的 token（延長過期時間為 5 分鐘）
+	// 生成新的 token（延長過期時間）
 	return GenerateJWT(claims.UserID, claims.Username, claims.Email, 5)
 }
 

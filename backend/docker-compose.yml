@@ -24,6 +24,8 @@ services:
     ports:
       - "8080:8080" # API port
       - "9090:9090" # Metrics port
+    env_file:
+      - .env
     environment:
       DB_DSN: "host=postgres user=postgres password=password dbname=iot_db port=5432 sslmode=disable TimeZone=Asia/Taipei"
       API_PORT: "8080"

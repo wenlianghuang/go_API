@@ -283,7 +283,7 @@ JWT token 包含以下信息：
 
 **字段說明：**
 - `user_id`, `username`, `email` - 用戶信息（自定義 claims）
-- `exp` (Expires At) - 過期時間（5分鐘後）
+- `exp` (Expires At) - 過期時間（24小時後）
 - `iat` (Issued At) - 簽發時間
 - `nbf` (Not Before) - 生效時間
 - `iss` (Issuer) - 簽發者（"my-api"）
@@ -373,14 +373,13 @@ server.ListenAndServeTLS("cert.pem", "key.pem")
 根據應用需求調整 token 過期時間：
 
 ```go
-// 當前設置：5分鐘（開發測試用）
-token, _ := GenerateJWT(userID, username, email, 5)
+// 當前設置：24小時
+token, _ := GenerateJWT(userID, username, email, 24)
 
 // 建議：
-// - 開發環境：5-15 分鐘（方便測試）
-// - 生產環境：60-120 分鐘（1-2小時）
+// - 短期 token：1-2 小時
 // - 配合 refresh token 機制
-token, _ := GenerateJWT(userID, username, email, 60)  // 1小時
+token, _ := GenerateJWT(userID, username, email, 2)
 ```
 
 #### 4. 密碼策略

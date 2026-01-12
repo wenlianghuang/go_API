@@ -87,7 +87,7 @@ func (s *Server) HandleRegister(w http.ResponseWriter, r *http.Request) {
 	// 返回響應
 	response := AuthResponse{
 		Token:     token,
-		ExpiresAt: time.Now().Add(5 * time.Minute), // 與 GenerateJWT 的參數一致
+		ExpiresAt: time.Now().Add(5 * time.Minute),
 		User:      ToUserResponse(user),
 	}
 
@@ -217,6 +217,17 @@ type CreateUserRequest struct {
 }
 
 // HandleCreateUser 處理建立使用者的請求（已廢棄，請使用 /auth/register）
+// @Summary      創建新用戶（已廢棄）
+// @Description  創建一個新的用戶帳號（已廢棄，請使用 /auth/register）
+// @Tags         users
+// @Accept       json
+// @Produce      json
+// @Param        user  body      CreateUserRequest  true  "用戶資訊"
+// @Success      201   {object}  UserResponse
+// @Failure      400   {object}  ErrorResponse
+// @Failure      500   {object}  ErrorResponse
+// @Router       /users [post]
+// @Deprecated
 func (s *Server) HandleCreateUser(w http.ResponseWriter, r *http.Request) {
 	var req CreateUserRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
