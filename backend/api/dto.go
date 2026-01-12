@@ -11,15 +11,15 @@ import (
 
 // RegisterRequest 註冊請求結構
 type RegisterRequest struct {
-	Username string `json:"username" example:"john_doe" binding:"required"`
-	Email    string `json:"email" example:"john@example.com" binding:"required"`
-	Password string `json:"password" example:"SecurePassword123" binding:"required"`
+	Username string `json:"username" validate:"required,min=3,max=50,alphanum" example:"john_doe"`
+	Email    string `json:"email" validate:"required,email" example:"john@example.com"`
+	Password string `json:"password" validate:"required,min=6,max=100" example:"SecurePassword123"`
 }
 
 // LoginRequest 登入請求結構
 type LoginRequest struct {
-	Email    string `json:"email" example:"john@example.com" binding:"required"`
-	Password string `json:"password" example:"SecurePassword123" binding:"required"`
+	Email    string `json:"email" validate:"required,email" example:"john@example.com"`
+	Password string `json:"password" validate:"required,min=6" example:"SecurePassword123"`
 }
 
 // AuthResponse 認證響應結構（包含 JWT token）

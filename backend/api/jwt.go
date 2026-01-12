@@ -37,7 +37,7 @@ type Claims struct {
 // 返回：JWT token 字符串
 func GenerateJWT(userID, username, email string, expirationHours int) (string, error) {
 	// 設定過期時間
-	expirationTime := time.Now().Add(time.Duration(expirationHours) * time.Hour)
+	expirationTime := time.Now().Add(time.Duration(expirationHours) * time.Minute)
 
 	// 創建 Claims
 	claims := &Claims{
