@@ -459,6 +459,47 @@ const docTemplate = `{
             }
         },
         "/telemetries": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "獲取系統中所有遙測數據的列表",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "telemetries"
+                ],
+                "summary": "獲取所有遙測數據列表",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/api.TelemetryResponse"
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            },
             "post": {
                 "security": [
                     {
@@ -668,7 +709,7 @@ const docTemplate = `{
                         "schema": {
                             "type": "array",
                             "items": {
-                                "$ref": "#/definitions/model.User"
+                                "$ref": "#/definitions/api.UserResponse"
                             }
                         }
                     },
@@ -713,7 +754,7 @@ const docTemplate = `{
                     "201": {
                         "description": "Created",
                         "schema": {
-                            "$ref": "#/definitions/model.User"
+                            "$ref": "#/definitions/api.UserResponse"
                         }
                     },
                     "400": {
@@ -762,7 +803,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/model.User"
+                            "$ref": "#/definitions/api.UserResponse"
                         }
                     },
                     "401": {
@@ -971,105 +1012,11 @@ const docTemplate = `{
                 }
             }
         },
-        "gorm.DeletedAt": {
-            "type": "object",
-            "properties": {
-                "time": {
-                    "type": "string"
-                },
-                "valid": {
-                    "description": "Valid is true if Time is not NULL",
-                    "type": "boolean"
-                }
-            }
-        },
-        "model.Device": {
-            "type": "object",
-            "properties": {
-                "createdAt": {
-                    "type": "string"
-                },
-                "deletedAt": {
-                    "$ref": "#/definitions/gorm.DeletedAt"
-                },
-                "id": {
-                    "type": "integer"
-                },
-                "isActive": {
-                    "type": "boolean"
-                },
-                "macAddress": {
-                    "description": "唯一索引",
-                    "type": "string"
-                },
-                "name": {
-                    "description": "使用 struct tags 定義資料庫欄位特性",
-                    "type": "string"
-                },
-                "telemetries": {
-                    "description": "這裡展示 GORM 的關聯：一對多 (One Device has many Telemetry data)",
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/model.Telemetry"
-                    }
-                },
-                "type": {
-                    "description": "e.g., \"Sensor\", \"Camera\"",
-                    "type": "string"
-                },
-                "updatedAt": {
-                    "type": "string"
-                },
-                "userID": {
-                    "description": "Foreign key to link to a User",
-                    "type": "string"
-                }
-            }
-        },
-        "model.Telemetry": {
-            "type": "object",
-            "properties": {
-                "createdAt": {
-                    "type": "string"
-                },
-                "dataType": {
-                    "description": "e.g., \"Temperature\", \"Humidity\"",
-                    "type": "string"
-                },
-                "deletedAt": {
-                    "$ref": "#/definitions/gorm.DeletedAt"
-                },
-                "deviceID": {
-                    "description": "外鍵",
-                    "type": "integer"
-                },
-                "id": {
-                    "type": "integer"
-                },
-                "recordedAt": {
-                    "type": "string"
-                },
-                "updatedAt": {
-                    "type": "string"
-                },
-                "value": {
-                    "type": "number",
-                    "format": "float64"
-                }
-            }
-        },
-        "model.User": {
+        "api.UserResponse": {
             "type": "object",
             "properties": {
                 "created_at": {
                     "type": "string"
-                },
-                "devices": {
-                    "description": "A user can have multiple devices",
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/model.Device"
-                    }
                 },
                 "email": {
                     "type": "string"

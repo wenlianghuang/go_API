@@ -5,6 +5,14 @@ import (
 	"time"
 )
 
+// UserResponse 使用者響應結構
+type UserResponse struct {
+	ID        string    `json:"id"`
+	Username  string    `json:"username"`
+	Email     string    `json:"email"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
 type TelemetryResponse struct {
 	ID        uint      `json:"id"`
 	DataType  string    `json:"data_type"`
@@ -25,6 +33,16 @@ type DeviceResponse struct {
 // ==========================================
 // 轉換函式 (Mapper Functions)
 // ==========================================
+
+// ToUserResponse 負責將內部模型轉換為外部 DTO
+func ToUserResponse(u model.User) UserResponse {
+	return UserResponse{
+		ID:        u.ID,
+		Username:  u.Username,
+		Email:     u.Email,
+		CreatedAt: u.CreatedAt,
+	}
+}
 
 // ToTelemetryResponse 負責將內部模型轉換為外部 DTO
 func ToTelemetryResponse(t model.Telemetry) TelemetryResponse {

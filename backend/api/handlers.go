@@ -26,7 +26,7 @@ type CreateUserRequest struct {
 // @Accept       json
 // @Produce      json
 // @Param        user  body      CreateUserRequest  true  "用戶資訊"
-// @Success      201   {object}  model.User
+// @Success      201   {object}  UserResponse
 // @Failure      400   {object}  ErrorResponse
 // @Failure      500   {object}  ErrorResponse
 // @Router       /users [post]
@@ -67,7 +67,7 @@ func (s *Server) HandleCreateUser(w http.ResponseWriter, r *http.Request) {
 // @Accept       json
 // @Produce      json
 // @Security     BearerAuth
-// @Success      200  {array}   model.User
+// @Success      200  {array}   UserResponse
 // @Failure      401  {object}  ErrorResponse
 // @Failure      500  {object}  ErrorResponse
 // @Router       /users [get]
@@ -88,7 +88,7 @@ func (s *Server) HandleListUsers(w http.ResponseWriter, r *http.Request) {
 // @Produce      json
 // @Security     BearerAuth
 // @Param        id   path      string  true  "用戶 ID"
-// @Success      200  {object}  model.User
+// @Success      200  {object}  UserResponse
 // @Failure      401  {object}  ErrorResponse
 // @Failure      404  {object}  ErrorResponse
 // @Router       /users/{id} [get]
@@ -315,6 +315,26 @@ func (s *Server) HandleCreateTelemetry(w http.ResponseWriter, r *http.Request) {
 	WriteJSON(w, http.StatusCreated, telemetry)
 	// 使用 deviceID 發布到具體的 topic (device:{id})
 	s.Hub.BroadcastToDevice(telemetry.DeviceID, ToTelemetryResponse(*telemetry))
+}
+
+// HandleListTelemetries 處理取得所有遙測數據的請求
+// @Summary      獲取所有遙測數據列表
+// @Description  獲取系統中所有遙測數據的列表
+// @Tags         telemetries
+// @Accept       json
+// @Produce      json
+// @Security     BearerAuth
+// @Success      200  {array}  TelemetryResponse
+// @Failure      401  {object}  ErrorResponse
+// @Failure      500  {object}  ErrorResponse
+// @Router       /telemetries [get]
+func (s *Server) HandleListTelemetries(w http.ResponseWriter, r *http.Request) {
+	telemetries, err := s.Store.ListTelemetries()
+	if err != nil {
+		WriteError(w, http.StatusInternalServerError, "Failed to fetch telemetries")
+		return
+	}
+	WriteJSON(w, http.StatusOK, telemetries)
 }
 
 // HandleGetTelemetry 處理取得遙測數據的請求

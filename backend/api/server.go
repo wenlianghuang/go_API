@@ -134,6 +134,9 @@ func (s *Server) mountRoutes() {
 
 		// 註冊 DELETE 路由
 		r.Delete("/devices/{id}", s.HandleDeleteDevice)
+
+		// Get all telemetries
+		r.Get("/telemetries", s.HandleListTelemetries)
 		// Get telemetry
 		r.Get("/telemetries/{id}", s.HandleGetTelemetry)
 		// Telemetry 相關路由（需要認證）

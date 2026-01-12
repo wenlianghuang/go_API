@@ -26,7 +26,8 @@ type Storage interface {
 	UpdateDevice(id uint, device *model.Device) error
 	// 部分更新設備（只更新提供的字段）- PATCH 使用
 	PatchDevice(id uint, updates map[string]interface{}) error
-	// 數據相關 (這裡先定義一個簡單的)
+	// 數據相關
+	ListTelemetries() ([]model.Telemetry, error)
 	AddTelemetry(data *model.Telemetry) error
 	GetTelemetryByID(id uint) (*model.Telemetry, error)
 	// 部分更新遙測數據（只更新提供的字段）- PATCH 使用
