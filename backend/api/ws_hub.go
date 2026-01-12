@@ -9,6 +9,7 @@ import (
 	"log"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/gorilla/websocket"
 	"github.com/redis/go-redis/v9"
@@ -24,6 +25,12 @@ type Hub struct {
 
 	// Redis 監聽的模式列表
 	redisPatterns []string
+
+	// 🆕 優雅停機支援
+	pubsub *redis.PubSub      // Redis 訂閱對象，用於關閉
+	ctx    context.Context    // 控制 Redis 監聽器的生命週期
+	cancel context.CancelFunc // 用於取消 context，觸發停機
+	wg     sync.WaitGroup     // 用於等待 goroutine 完成
 }
 
 func NewHub(rdb *redis.Client) *Hub {
@@ -34,46 +41,68 @@ func NewHub(rdb *redis.Client) *Hub {
 		// 可以在這裡添加更多模式
 	}
 
+	// 🆕 創建可取消的 context，用於控制停機
+	ctx, cancel := context.WithCancel(context.Background())
+
 	h := &Hub{
 		topics:        make(map[string]map[*websocket.Conn]bool),
 		rdb:           rdb,
 		redisPatterns: patterns,
+		ctx:           ctx,    // 🆕 儲存 context
+		cancel:        cancel, // 🆕 儲存 cancel 函數
 	}
 
 	// 🔥 關鍵：啟動背景任務監聽 Redis
+	// 🆕 使用 WaitGroup 追蹤 goroutine，以便停機時等待
+	h.wg.Add(1)
 	go h.listenToRedis()
 
 	return h
 }
 
 // listenToRedis 監聽 Redis 的廣播，收到後分發給本地連線
+// 🆕 支援優雅停機：當 h.ctx 被取消時，會自動退出
 func (h *Hub) listenToRedis() {
-	ctx := context.Background()
+	// 🆕 確保在函數退出時標記 WaitGroup 完成
+	defer h.wg.Done()
 
-	// 使用 Pattern Subscribe 同時監聽多個模式
-	pubsub := h.rdb.PSubscribe(ctx, h.redisPatterns...)
-	defer pubsub.Close()
+	// 🆕 使用 Hub 的 context 代替 Background context
+	// 這樣當 context 被取消時，訂閱會自動關閉
+	h.pubsub = h.rdb.PSubscribe(h.ctx, h.redisPatterns...)
+	defer h.pubsub.Close()
 
-	ch := pubsub.Channel()
+	ch := h.pubsub.Channel()
 	fmt.Printf("👷 Redis 監聽器已啟動，監聽模式: %v\n", h.redisPatterns)
 
-	for msg := range ch {
-		// 當 Redis 收到訊息時，msg.Channel 就是 Topic (如 device:1 或 value:22.5)
-		// msg.Payload 就是數據內容
-		if msg == nil {
-			log.Printf("⚠️ Redis 收到 nil 訊息，可能連接已關閉")
+	// 🆕 使用 select 監聽 context 取消信號和 Redis 訊息
+	for {
+		select {
+		case <-h.ctx.Done():
+			// 🆕 收到停機信號，優雅退出
+			fmt.Println("🛑 Redis 監聽器收到停機信號，準備關閉...")
 			return
+
+		case msg, ok := <-ch:
+			// 🆕 檢查 channel 是否已關閉
+			if !ok {
+				log.Printf("⚠️ Redis 監聽器 channel 已關閉")
+				return
+			}
+			// 當 Redis 收到訊息時，msg.Channel 就是 Topic (如 device:1 或 value:22.5)
+			// msg.Payload 就是數據內容
+			if msg == nil {
+				log.Printf("⚠️ Redis 收到 nil 訊息，可能連接已關閉")
+				return
+			}
+			// 檢查是否為錯誤訊息（go-redis 會在錯誤時發送特殊格式的訊息）
+			if msg.Payload == "" && msg.Channel == "" {
+				log.Printf("⚠️ Redis 收到空訊息")
+				continue
+			}
+			// 正常處理訊息
+			h.broadcastToLocal(msg.Channel, msg.Payload)
 		}
-		// 檢查是否為錯誤訊息（go-redis 會在錯誤時發送特殊格式的訊息）
-		if msg.Payload == "" && msg.Channel == "" {
-			log.Printf("⚠️ Redis 收到空訊息")
-			continue
-		}
-		// 正常處理訊息
-		h.broadcastToLocal(msg.Channel, msg.Payload)
 	}
-	// Channel 關閉時記錄日誌（可能是正常關閉或錯誤）
-	log.Printf("⚠️ Redis 監聽器 channel 已關閉")
 }
 
 // matchPattern 檢查 topic 是否匹配 pattern
@@ -244,5 +273,58 @@ func (h *Hub) BroadcastToDevice(deviceID uint, v interface{}) {
 	}
 	if err := h.Publish(ctx, topic, v); err != nil {
 		log.Printf("❌ Broadcast 失敗 (topic: %s): %v", topic, err)
+	}
+}
+
+// 🆕 Shutdown 優雅停機：關閉所有連接並等待 goroutine 退出
+// 此方法會：
+// 1. 取消 context，停止 Redis 監聽器
+// 2. 關閉所有 WebSocket 連接（通知客戶端服務器正在關閉）
+// 3. 等待 Redis 監聽器 goroutine 完全退出
+func (h *Hub) Shutdown(ctx context.Context) error {
+	fmt.Println("🔄 正在關閉 WebSocket Hub...")
+
+	// 步驟 1：取消 context，觸發 Redis 監聽器停止
+	h.cancel()
+
+	// 步驟 2：收集所有 WebSocket 連接並關閉
+	h.mu.Lock()
+	var allConns []*websocket.Conn
+	// 遍歷所有 topics，收集所有連接
+	for _, clients := range h.topics {
+		for conn := range clients {
+			allConns = append(allConns, conn)
+		}
+	}
+	// 清空 topics map（因為我們要關閉所有連接）
+	h.topics = make(map[string]map[*websocket.Conn]bool)
+	h.mu.Unlock()
+
+	// 發送 WebSocket 關閉幀給所有客戶端
+	// CloseGoingAway (1001) 表示服務器正在關閉
+	closeMessage := websocket.FormatCloseMessage(websocket.CloseGoingAway, "Server is shutting down")
+	for _, conn := range allConns {
+		// 發送關閉消息（設定 1 秒超時）
+		_ = conn.WriteControl(websocket.CloseMessage, closeMessage, time.Now().Add(time.Second))
+		// 關閉連接
+		_ = conn.Close()
+	}
+	fmt.Printf("✅ 已關閉 %d 個 WebSocket 連接\n", len(allConns))
+
+	// 步驟 3：等待 Redis 監聽器 goroutine 退出（帶超時保護）
+	done := make(chan struct{})
+	go func() {
+		h.wg.Wait() // 等待所有 goroutine 完成
+		close(done)
+	}()
+
+	select {
+	case <-done:
+		// 所有 goroutine 已完成
+		fmt.Println("✅ Redis 監聽器已安全關閉")
+		return nil
+	case <-ctx.Done():
+		// 超時了，但 goroutine 可能還在運行
+		return fmt.Errorf("Hub 停機超時，但已發送停止信號")
 	}
 }

@@ -10,7 +10,6 @@ import (
 
 	"my-api/api"
 	"my-api/model"
-	"my-api/store"
 )
 
 // 1. 定義一個 MockStore
@@ -21,7 +20,7 @@ type MockStore struct {
 }
 
 // 實作 Storage 介面的 Create 方法
-func (m *MockStore) Create(u store.User) error {
+func (m *MockStore) Create(u model.User) error {
 	if m.ShouldError {
 		return errors.New("mock database error")
 	}
@@ -29,8 +28,8 @@ func (m *MockStore) Create(u store.User) error {
 }
 
 // 實作其他方法以滿足介面 (雖然這次測試用不到)
-func (m *MockStore) Get(id string) (store.User, error) { return store.User{}, nil }
-func (m *MockStore) List() ([]store.User, error)       { return nil, nil }
+func (m *MockStore) Get(id string) (model.User, error) { return model.User{}, nil }
+func (m *MockStore) List() ([]model.User, error)       { return nil, nil }
 
 // 實作 Storage 介面的設備相關方法
 func (m *MockStore) CreateDevice(dev *model.Device) error               { return nil }
@@ -97,7 +96,7 @@ func TestHandleCreateUser(t *testing.T) {
 			// 1. 準備依賴 (Arrange)
 			// 使用我們的 MockStore，而不是真實的 MemoryStore
 			mockStore := &MockStore{ShouldError: tt.mockShouldErr}
-			srv := api.NewServer(mockStore)
+			srv := api.NewServer(mockStore, "localhost:6379")
 
 			// 2. 準備請求 (Act)
 			// 把 map 轉成 json body
@@ -122,7 +121,7 @@ func TestHandleCreateUser(t *testing.T) {
 
 			// 如果是成功案例，我們可以進一步檢查回傳的 JSON 內容
 			if !tt.mockShouldErr && tt.expectedStatus == http.StatusCreated {
-				var createdUser store.User
+				var createdUser model.User
 				json.NewDecoder(rr.Body).Decode(&createdUser)
 
 				if createdUser.Username != tt.inputBody["username"] {
@@ -133,5 +132,3 @@ func TestHandleCreateUser(t *testing.T) {
 		})
 	}
 }
-
-// backend/main_test.go

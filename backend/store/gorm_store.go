@@ -13,8 +13,35 @@ type GormStore struct {
 }
 
 // NewGormStore 是一個工廠函式
-func NewGormStore(db *gorm.DB) *GormStore {
-	return &GormStore{db: db}
+func NewGormStore(db *gorm.DB) (*GormStore, error) {
+	// 自動遷移
+	err := db.AutoMigrate(&model.Device{}, &model.Telemetry{}, &model.User{})
+	if err != nil {
+		return nil, err
+	}
+	return &GormStore{db: db}, nil
+}
+
+// Create 實作建立使用者
+func (s *GormStore) Create(u model.User) error {
+	return s.db.Create(&u).Error
+}
+
+// Get 實作查詢單一使用者
+func (s *GormStore) Get(id string) (model.User, error) {
+	var user model.User
+	result := s.db.Where("id = ?", id).First(&user)
+	if result.Error != nil {
+		return model.User{}, result.Error
+	}
+	return user, nil
+}
+
+// List 實作列表查詢使用者
+func (s *GormStore) List() ([]model.User, error) {
+	var users []model.User
+	result := s.db.Find(&users)
+	return users, result.Error
 }
 
 // CreateDevice 實作建立設備
@@ -69,28 +96,6 @@ func (s *GormStore) GetTelemetryByID(id uint) (*model.Telemetry, error) {
 		return nil, result.Error
 	}
 	return &telemetry, nil
-}
-
-// Create 實作建立使用者
-func (s *GormStore) Create(u User) error {
-	return s.db.Create(&u).Error
-}
-
-// Get 實作查詢單一使用者
-func (s *GormStore) Get(id string) (User, error) {
-	var user User
-	result := s.db.Where("id = ?", id).First(&user)
-	if result.Error != nil {
-		return User{}, result.Error
-	}
-	return user, nil
-}
-
-// List 實作列表查詢使用者
-func (s *GormStore) List() ([]User, error) {
-	var users []User
-	result := s.db.Find(&users)
-	return users, result.Error
 }
 
 // DeleteDeviceWithAllData 刪除設備及其所有遙測數據 (原子性操作)
