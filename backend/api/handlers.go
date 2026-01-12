@@ -11,17 +11,200 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/gorilla/websocket"
+	"golang.org/x/crypto/bcrypt"
 )
 
-// CreateUserRequest 創建用戶請求結構
-type CreateUserRequest struct {
-	Username string `json:"username" example:"john_doe" binding:"required"`
-	Email    string `json:"email" example:"john@example.com" binding:"required"`
+// ==========================================
+// 認證相關的 Handlers
+// ==========================================
+
+// HandleRegister 處理用戶註冊請求
+// @Summary      用戶註冊
+// @Description  註冊一個新的用戶帳號並返回 JWT token
+// @Tags         auth
+// @Accept       json
+// @Produce      json
+// @Param        user  body      RegisterRequest  true  "註冊資訊"
+// @Success      201   {object}  AuthResponse
+// @Failure      400   {object}  ErrorResponse
+// @Failure      409   {object}  ErrorResponse  "用戶已存在"
+// @Failure      500   {object}  ErrorResponse
+// @Router       /auth/register [post]
+func (s *Server) HandleRegister(w http.ResponseWriter, r *http.Request) {
+	var req RegisterRequest
+
+	// 使用新的驗證工具：自動解碼 + 驗證
+	if err := ValidateAndDecode(r, &req); err != nil {
+		HandleValidationError(w, err)
+		return
+	}
+
+	// 檢查用戶是否已存在
+	if _, err := s.Store.GetUserByEmail(req.Email); err == nil {
+		WriteError(w, http.StatusConflict, "User with this email already exists")
+		return
+	}
+
+	// 對密碼進行哈希加密
+	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
+	if err != nil {
+		WriteError(w, http.StatusInternalServerError, "Failed to hash password")
+		return
+	}
+
+	// 創建用戶
+	user := model.User{
+		ID:        fmt.Sprintf("usr_%d", time.Now().UnixNano()),
+		Username:  req.Username,
+		Email:     req.Email,
+		Password:  string(hashedPassword),
+		CreatedAt: time.Now(),
+	}
+
+	// 保存到數據庫
+	if err := s.Store.Create(user); err != nil {
+		WriteError(w, http.StatusInternalServerError, "Failed to create user: "+err.Error())
+		return
+	}
+
+	// 生成 JWT token
+	token, err := GenerateJWT(user.ID, user.Username, user.Email, 5) // 5分鐘過期
+	if err != nil {
+		WriteError(w, http.StatusInternalServerError, "Failed to generate token")
+		return
+	}
+
+	// 返回響應
+	response := AuthResponse{
+		Token:     token,
+		ExpiresAt: time.Now().Add(5 * time.Minute),
+		User:      ToUserResponse(user),
+	}
+
+	WriteJSON(w, http.StatusCreated, response)
 }
 
-// HandleCreateUser 處理建立使用者的請求
-// @Summary      創建新用戶
-// @Description  創建一個新的用戶帳號
+// HandleLogin 處理用戶登入請求
+// @Summary      用戶登入
+// @Description  使用郵箱和密碼登入，返回 JWT token
+// @Tags         auth
+// @Accept       json
+// @Produce      json
+// @Param        credentials  body      LoginRequest  true  "登入憑證"
+// @Success      200          {object}  AuthResponse
+// @Failure      400          {object}  ErrorResponse
+// @Failure      401          {object}  ErrorResponse  "郵箱或密碼錯誤"
+// @Failure      500          {object}  ErrorResponse
+// @Router       /auth/login [post]
+func (s *Server) HandleLogin(w http.ResponseWriter, r *http.Request) {
+	var req LoginRequest
+
+	// 使用新的驗證工具：自動解碼 + 驗證
+	if err := ValidateAndDecode(r, &req); err != nil {
+		HandleValidationError(w, err)
+		return
+	}
+
+	// 根據 email 查找用戶
+	user, err := s.Store.GetUserByEmail(req.Email)
+	if err != nil {
+		WriteError(w, http.StatusUnauthorized, "Invalid email or password")
+		return
+	}
+
+	// 驗證密碼
+	if err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(req.Password)); err != nil {
+		WriteError(w, http.StatusUnauthorized, "Invalid email or password")
+		return
+	}
+
+	// 生成 JWT token
+	token, err := GenerateJWT(user.ID, user.Username, user.Email, 5) // 5分鐘過期
+	if err != nil {
+		WriteError(w, http.StatusInternalServerError, "Failed to generate token")
+		return
+	}
+
+	// 返回響應
+	response := AuthResponse{
+		Token:     token,
+		ExpiresAt: time.Now().Add(5 * time.Minute),
+		User:      ToUserResponse(user),
+	}
+
+	WriteJSON(w, http.StatusOK, response)
+}
+
+// HandleRefreshToken 處理刷新 token 請求
+// @Summary      刷新 JWT token
+// @Description  使用舊的 token 刷新獲取新的 token（延長過期時間）
+// @Tags         auth
+// @Accept       json
+// @Produce      json
+// @Security     BearerAuth
+// @Success      200  {object}  AuthResponse
+// @Failure      401  {object}  ErrorResponse
+// @Failure      500  {object}  ErrorResponse
+// @Router       /auth/refresh [post]
+func (s *Server) HandleRefreshToken(w http.ResponseWriter, r *http.Request) {
+	// 從 header 中獲取 token
+	authHeader := r.Header.Get("Authorization")
+	if authHeader == "" {
+		WriteError(w, http.StatusUnauthorized, "Missing Authorization header")
+		return
+	}
+
+	// 解析 Bearer token
+	var tokenString string
+	if _, err := fmt.Sscanf(authHeader, "Bearer %s", &tokenString); err != nil {
+		WriteError(w, http.StatusUnauthorized, "Invalid token format")
+		return
+	}
+
+	// 刷新 token
+	newToken, err := RefreshJWT(tokenString)
+	if err != nil {
+		WriteError(w, http.StatusUnauthorized, "Invalid or expired token")
+		return
+	}
+
+	// 解析新 token 以獲取用戶信息
+	claims, err := ValidateJWT(newToken)
+	if err != nil {
+		WriteError(w, http.StatusInternalServerError, "Failed to parse new token")
+		return
+	}
+
+	// 從數據庫獲取用戶最新信息
+	user, err := s.Store.Get(claims.UserID)
+	if err != nil {
+		WriteError(w, http.StatusInternalServerError, "Failed to fetch user")
+		return
+	}
+
+	// 返回響應
+	response := AuthResponse{
+		Token:     newToken,
+		ExpiresAt: time.Now().Add(5 * time.Minute),
+		User:      ToUserResponse(user),
+	}
+
+	WriteJSON(w, http.StatusOK, response)
+}
+
+// ==========================================
+// 用戶管理相關的 Handlers (保留舊的，用於兼容)
+// ==========================================
+
+// CreateUserRequest 創建用戶請求結構（已廢棄，請使用 /auth/register）
+type CreateUserRequest struct {
+	Username string `json:"username" validate:"required,min=3,max=50" example:"john_doe"`
+	Email    string `json:"email" validate:"required,email" example:"john@example.com"`
+}
+
+// HandleCreateUser 處理建立使用者的請求（已廢棄，請使用 /auth/register）
+// @Summary      創建新用戶（已廢棄）
+// @Description  創建一個新的用戶帳號（已廢棄，請使用 /auth/register）
 // @Tags         users
 // @Accept       json
 // @Produce      json
@@ -30,16 +213,13 @@ type CreateUserRequest struct {
 // @Failure      400   {object}  ErrorResponse
 // @Failure      500   {object}  ErrorResponse
 // @Router       /users [post]
+// @Deprecated
 func (s *Server) HandleCreateUser(w http.ResponseWriter, r *http.Request) {
 	var req CreateUserRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		WriteError(w, http.StatusBadRequest, "Invalid request payload")
-		return
-	}
 
-	// 簡單驗證
-	if req.Username == "" || req.Email == "" {
-		WriteError(w, http.StatusBadRequest, "Username and Email are required")
+	// 使用新的驗證工具
+	if err := ValidateAndDecode(r, &req); err != nil {
+		HandleValidationError(w, err)
 		return
 	}
 
@@ -135,9 +315,9 @@ func (s *Server) HandleMe(w http.ResponseWriter, r *http.Request) {
 
 // CreateDeviceRequest 創建設備請求結構
 type CreateDeviceRequest struct {
-	Name       string `json:"name" example:"Temperature Sensor 1" binding:"required"`
-	Type       string `json:"type" example:"Sensor"`
-	MacAddress string `json:"mac_address" example:"00:11:22:33:44:55" binding:"required"`
+	Name       string `json:"name" validate:"required,min=1,max=100" example:"Temperature Sensor 1"`
+	Type       string `json:"type" validate:"omitempty" example:"Sensor"`
+	MacAddress string `json:"mac_address" validate:"required,mac" example:"00:11:22:33:44:55"`
 	IsActive   bool   `json:"is_active" example:"true"`
 }
 
@@ -155,16 +335,11 @@ type CreateDeviceRequest struct {
 // @Failure      500     {object}  ErrorResponse
 // @Router       /devices [post]
 func (s *Server) HandleCreateDevice(w http.ResponseWriter, r *http.Request) {
-
 	var req CreateDeviceRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		WriteError(w, http.StatusBadRequest, "Invalid request payload")
-		return
-	}
 
-	// 簡單驗證
-	if req.Name == "" || req.MacAddress == "" {
-		WriteError(w, http.StatusBadRequest, "Name and MacAddress are required")
+	// 使用新的驗證工具
+	if err := ValidateAndDecode(r, &req); err != nil {
+		HandleValidationError(w, err)
 		return
 	}
 
@@ -245,10 +420,10 @@ func (s *Server) HandleGetDevice(w http.ResponseWriter, r *http.Request) {
 
 // CreateTelemetryRequest 創建遙測數據請求結構
 type CreateTelemetryRequest struct {
-	DeviceID   uint    `json:"device_id" example:"1" binding:"required"`
-	DataType   string  `json:"data_type" example:"Temperature" binding:"required"`
-	Value      float64 `json:"value" example:"25.5"`
-	RecordedAt string  `json:"recorded_at,omitempty" example:"2024-01-01T00:00:00Z"` // 可選，如果沒有提供則使用當前時間
+	DeviceID   uint    `json:"device_id" validate:"required,gt=0" example:"1"`
+	DataType   string  `json:"data_type" validate:"required,min=1,max=50" example:"Temperature"`
+	Value      float64 `json:"value" validate:"required" example:"25.5"`
+	RecordedAt string  `json:"recorded_at,omitempty" validate:"omitempty,datetime=2006-01-02T15:04:05Z07:00" example:"2024-01-01T00:00:00Z"` // 可選，如果沒有提供則使用當前時間
 }
 
 // HandleCreateTelemetry 處理建立遙測數據的請求
@@ -266,16 +441,11 @@ type CreateTelemetryRequest struct {
 // @Failure      500        {object}  ErrorResponse
 // @Router       /telemetries [post]
 func (s *Server) HandleCreateTelemetry(w http.ResponseWriter, r *http.Request) {
-
 	var req CreateTelemetryRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		WriteError(w, http.StatusBadRequest, fmt.Sprintf("Invalid request payload: %v", err))
-		return
-	}
 
-	// 簡單驗證
-	if req.DeviceID == 0 || req.DataType == "" {
-		WriteError(w, http.StatusBadRequest, "DeviceID and DataType are required")
+	// 使用新的驗證工具
+	if err := ValidateAndDecode(r, &req); err != nil {
+		HandleValidationError(w, err)
 		return
 	}
 
@@ -401,9 +571,9 @@ func (s *Server) HandleDeleteDevice(w http.ResponseWriter, r *http.Request) {
 
 // UpdateDeviceRequest 更新設備請求結構
 type UpdateDeviceRequest struct {
-	Name       string `json:"name" example:"Temperature Sensor 1" binding:"required"`
-	Type       string `json:"type" example:"Sensor"`
-	MacAddress string `json:"mac_address" example:"00:11:22:33:44:55" binding:"required"`
+	Name       string `json:"name" validate:"required,min=1,max=100" example:"Temperature Sensor 1"`
+	Type       string `json:"type" validate:"omitempty" example:"Sensor"`
+	MacAddress string `json:"mac_address" validate:"required,mac" example:"00:11:22:33:44:55"`
 	IsActive   bool   `json:"is_active" example:"true"`
 }
 
@@ -423,7 +593,6 @@ type UpdateDeviceRequest struct {
 // @Failure      500     {object}  ErrorResponse
 // @Router       /devices/{id} [put]
 func (s *Server) HandleUpdateDevice(w http.ResponseWriter, r *http.Request) {
-
 	// 1. 解析 ID
 	idStr := chi.URLParam(r, "id")
 	id, err := strconv.ParseUint(idStr, 10, 32)
@@ -432,16 +601,10 @@ func (s *Server) HandleUpdateDevice(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 2. 解析請求體
+	// 2. 解析請求體並驗證
 	var req UpdateDeviceRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		WriteError(w, http.StatusBadRequest, "Invalid request payload")
-		return
-	}
-
-	// 3. PUT 要求所有必填字段都必須提供
-	if req.Name == "" || req.MacAddress == "" {
-		WriteError(w, http.StatusBadRequest, "Name and MacAddress are required for PUT request")
+	if err := ValidateAndDecode(r, &req); err != nil {
+		HandleValidationError(w, err)
 		return
 	}
 
@@ -479,9 +642,9 @@ func (s *Server) HandleUpdateDevice(w http.ResponseWriter, r *http.Request) {
 
 // PatchDeviceRequest 部分更新設備請求結構
 type PatchDeviceRequest struct {
-	Name       *string `json:"name,omitempty" example:"Temperature Sensor 1"` // 使用指針，nil 表示不更新
-	Type       *string `json:"type,omitempty" example:"Sensor"`
-	MacAddress *string `json:"mac_address,omitempty" example:"00:11:22:33:44:55"`
+	Name       *string `json:"name,omitempty" validate:"omitempty,min=1,max=100" example:"Temperature Sensor 1"` // 使用指針，nil 表示不更新
+	Type       *string `json:"type,omitempty" validate:"omitempty" example:"Sensor"`
+	MacAddress *string `json:"mac_address,omitempty" validate:"omitempty,mac" example:"00:11:22:33:44:55"`
 	IsActive   *bool   `json:"is_active,omitempty" example:"true"`
 }
 
@@ -501,7 +664,6 @@ type PatchDeviceRequest struct {
 // @Failure      500     {object}  ErrorResponse
 // @Router       /devices/{id} [patch]
 func (s *Server) HandlePatchDevice(w http.ResponseWriter, r *http.Request) {
-
 	// 1. 解析 ID
 	idStr := chi.URLParam(r, "id")
 	id, err := strconv.ParseUint(idStr, 10, 32)
@@ -517,30 +679,22 @@ func (s *Server) HandlePatchDevice(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 3. 解析請求體
+	// 3. 解析請求體並驗證
 	var req PatchDeviceRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		WriteError(w, http.StatusBadRequest, "Invalid request payload")
+	if err := ValidateAndDecode(r, &req); err != nil {
+		HandleValidationError(w, err)
 		return
 	}
 
 	// 4. 構建更新映射（只包含提供的字段）
 	updates := make(map[string]interface{})
 	if req.Name != nil {
-		if *req.Name == "" {
-			WriteError(w, http.StatusBadRequest, "Name cannot be empty")
-			return
-		}
 		updates["name"] = *req.Name
 	}
 	if req.Type != nil {
 		updates["type"] = *req.Type
 	}
 	if req.MacAddress != nil {
-		if *req.MacAddress == "" {
-			WriteError(w, http.StatusBadRequest, "MacAddress cannot be empty")
-			return
-		}
 		updates["mac_address"] = *req.MacAddress
 	}
 	if req.IsActive != nil {
@@ -665,10 +819,10 @@ func (s *Server) HandleWS(w http.ResponseWriter, r *http.Request) {
 
 // PatchTelemetryRequest 部分更新遙測數據請求結構
 type PatchTelemetryRequest struct {
-	DeviceID   *uint    `json:"device_id,omitempty" example:"1"` // 使用指針，nil 表示不更新
-	DataType   *string  `json:"data_type,omitempty" example:"Temperature"`
+	DeviceID   *uint    `json:"device_id,omitempty" validate:"omitempty,gt=0" example:"1"` // 使用指針，nil 表示不更新
+	DataType   *string  `json:"data_type,omitempty" validate:"omitempty,min=1,max=50" example:"Temperature"`
 	Value      *float64 `json:"value,omitempty" example:"25.5"`
-	RecordedAt *string  `json:"recorded_at,omitempty" example:"2024-01-01T00:00:00Z"`
+	RecordedAt *string  `json:"recorded_at,omitempty" validate:"omitempty,datetime=2006-01-02T15:04:05Z07:00" example:"2024-01-01T00:00:00Z"`
 }
 
 // HandlePatchTelemetry 處理 PATCH 請求 - 部分更新遙測數據（只需要提供要更新的字段）
@@ -687,7 +841,6 @@ type PatchTelemetryRequest struct {
 // @Failure      500        {object}  ErrorResponse
 // @Router       /telemetries/{id} [patch]
 func (s *Server) HandlePatchTelemetry(w http.ResponseWriter, r *http.Request) {
-
 	// 1. 解析 ID
 	idStr := chi.URLParam(r, "id")
 	id, err := strconv.ParseUint(idStr, 10, 32)
@@ -703,20 +856,16 @@ func (s *Server) HandlePatchTelemetry(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 3. 解析請求體
+	// 3. 解析請求體並驗證
 	var req PatchTelemetryRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		WriteError(w, http.StatusBadRequest, "Invalid request payload")
+	if err := ValidateAndDecode(r, &req); err != nil {
+		HandleValidationError(w, err)
 		return
 	}
 
 	// 4. 構建更新映射（只包含提供的字段）
 	updates := make(map[string]interface{})
 	if req.DeviceID != nil {
-		if *req.DeviceID == 0 {
-			WriteError(w, http.StatusBadRequest, "DeviceID cannot be zero")
-			return
-		}
 		// 驗證設備是否存在
 		_, err := s.Store.GetDeviceByID(*req.DeviceID)
 		if err != nil {
@@ -726,10 +875,6 @@ func (s *Server) HandlePatchTelemetry(w http.ResponseWriter, r *http.Request) {
 		updates["device_id"] = *req.DeviceID
 	}
 	if req.DataType != nil {
-		if *req.DataType == "" {
-			WriteError(w, http.StatusBadRequest, "DataType cannot be empty")
-			return
-		}
 		updates["data_type"] = *req.DataType
 	}
 	if req.Value != nil {

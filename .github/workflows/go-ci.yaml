@@ -44,6 +44,8 @@ jobs:
       
       # Step 3: 執行測試與品質檢查
       - name: Run checks and tests
+        env:
+          JWT_SECRET: ci-test-secret-not-for-production
         run: |
           cd backend
           test -z "$(gofmt -l .)"  # 檢查格式

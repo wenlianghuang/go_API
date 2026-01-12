@@ -12,6 +12,7 @@ type Storage interface {
 	// User 相關
 	Create(u model.User) error
 	Get(id string) (model.User, error)
+	GetUserByEmail(email string) (model.User, error)
 	List() ([]model.User, error)
 
 	// 設備相關
@@ -85,6 +86,29 @@ func (s *MemoryStore) List() ([]model.User, error) {
 		users = append(users, u)
 	}
 	return users, nil
+}
+
+func (s *MemoryStore) GetUserByEmail(email string) (model.User, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	for _, u := range s.users {
+		if u.Email == email {
+			return u, nil
+		}
+	}
+	return model.User{}, fmt.Errorf("user not found")
+}
+
+func (s *MemoryStore) ListTelemetries() ([]model.Telemetry, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	var telemetries []model.Telemetry
+	for _, tel := range s.telemetries {
+		telemetries = append(telemetries, *tel)
+	}
+	return telemetries, nil
 }
 
 func (s *MemoryStore) CreateDevice(dev *model.Device) error {
