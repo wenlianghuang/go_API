@@ -26,7 +26,7 @@ type CreateUserRequest struct {
 // @Accept       json
 // @Produce      json
 // @Param        user  body      CreateUserRequest  true  "用戶資訊"
-// @Success      201   {object}  model.User
+// @Success      201   {object}  UserResponse
 // @Failure      400   {object}  ErrorResponse
 // @Failure      500   {object}  ErrorResponse
 // @Router       /users [post]
@@ -67,7 +67,7 @@ func (s *Server) HandleCreateUser(w http.ResponseWriter, r *http.Request) {
 // @Accept       json
 // @Produce      json
 // @Security     BearerAuth
-// @Success      200  {array}   model.User
+// @Success      200  {array}   UserResponse
 // @Failure      401  {object}  ErrorResponse
 // @Failure      500  {object}  ErrorResponse
 // @Router       /users [get]
@@ -88,7 +88,7 @@ func (s *Server) HandleListUsers(w http.ResponseWriter, r *http.Request) {
 // @Produce      json
 // @Security     BearerAuth
 // @Param        id   path      string  true  "用戶 ID"
-// @Success      200  {object}  model.User
+// @Success      200  {object}  UserResponse
 // @Failure      401  {object}  ErrorResponse
 // @Failure      404  {object}  ErrorResponse
 // @Router       /users/{id} [get]
