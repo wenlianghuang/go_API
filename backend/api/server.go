@@ -105,25 +105,33 @@ func (s *Server) mountRoutes() {
 	// === 1. 公開路由 (Public Routes) ===
 	// 任何人都可以訪問，不需要 Token
 	s.Router.Get("/", func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte("Welcome to the Mortgage System API"))
+		w.Write([]byte("Welcome to the IoT API System"))
 	})
 
 	// Swagger UI 路由
 	s.Router.Get("/swagger/*", httpSwagger.WrapHandler)
 
-	// 假設註冊也是公開的
+	// === 認證路由 (Authentication Routes) ===
+	// 這些路由是公開的，用於用戶註冊和登入
+	s.Router.Post("/auth/register", s.HandleRegister) // 用戶註冊
+	s.Router.Post("/auth/login", s.HandleLogin)       // 用戶登入
+
+	// 舊的用戶創建路由（已廢棄，保留用於向後兼容）
 	s.Router.Post("/users", s.HandleCreateUser)
 
 	// === 2. 私有路由 (Private Routes) ===
-	// 這裡面的所有路由，都會先經過 AuthMiddleware
+	// 這裡面的所有路由，都會先經過 AuthMiddleware（需要有效的 JWT token）
 	s.Router.Group(func(r chi.Router) {
-		// 掛載中間件
+		// 掛載 JWT 驗證中間件
 		r.Use(s.AuthMiddleware)
 
-		// User 相關路由
-		r.Get("/users", s.HandleListUsers)    // 只有管理員能看列表
-		r.Get("/users/{id}", s.HandleGetUser) // 只有管理員能查詳情
-		r.Get("/me", s.HandleMe)              // 測試 Context 注入用
+		// === 認證相關路由（需要已登入） ===
+		r.Post("/auth/refresh", s.HandleRefreshToken) // 刷新 token
+
+		// === User 相關路由（需要已登入） ===
+		r.Get("/users", s.HandleListUsers)    // 獲取所有用戶列表
+		r.Get("/users/{id}", s.HandleGetUser) // 獲取特定用戶資訊
+		r.Get("/me", s.HandleMe)              // 獲取當前登入用戶資訊
 
 		// Device 相關路由（所有端點都需要認證）
 		r.Post("/devices", s.HandleCreateDevice)

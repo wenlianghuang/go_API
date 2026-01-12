@@ -28,8 +28,9 @@ func (m *MockStore) Create(u model.User) error {
 }
 
 // 實作其他方法以滿足介面 (雖然這次測試用不到)
-func (m *MockStore) Get(id string) (model.User, error) { return model.User{}, nil }
-func (m *MockStore) List() ([]model.User, error)       { return nil, nil }
+func (m *MockStore) Get(id string) (model.User, error)               { return model.User{}, nil }
+func (m *MockStore) GetUserByEmail(email string) (model.User, error) { return model.User{}, nil }
+func (m *MockStore) List() ([]model.User, error)                     { return nil, nil }
 
 // 實作 Storage 介面的設備相關方法
 func (m *MockStore) CreateDevice(dev *model.Device) error               { return nil }

@@ -11,25 +11,212 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/gorilla/websocket"
+	"golang.org/x/crypto/bcrypt"
 )
 
-// CreateUserRequest 創建用戶請求結構
+// ==========================================
+// 認證相關的 Handlers
+// ==========================================
+
+// HandleRegister 處理用戶註冊請求
+// @Summary      用戶註冊
+// @Description  註冊一個新的用戶帳號並返回 JWT token
+// @Tags         auth
+// @Accept       json
+// @Produce      json
+// @Param        user  body      RegisterRequest  true  "註冊資訊"
+// @Success      201   {object}  AuthResponse
+// @Failure      400   {object}  ErrorResponse
+// @Failure      409   {object}  ErrorResponse  "用戶已存在"
+// @Failure      500   {object}  ErrorResponse
+// @Router       /auth/register [post]
+func (s *Server) HandleRegister(w http.ResponseWriter, r *http.Request) {
+	var req RegisterRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		WriteError(w, http.StatusBadRequest, "Invalid request payload")
+		return
+	}
+
+	// 驗證必填字段
+	if req.Username == "" || req.Email == "" || req.Password == "" {
+		WriteError(w, http.StatusBadRequest, "Username, Email and Password are required")
+		return
+	}
+
+	// 檢查密碼長度
+	if len(req.Password) < 6 {
+		WriteError(w, http.StatusBadRequest, "Password must be at least 6 characters")
+		return
+	}
+
+	// 檢查用戶是否已存在
+	if _, err := s.Store.GetUserByEmail(req.Email); err == nil {
+		WriteError(w, http.StatusConflict, "User with this email already exists")
+		return
+	}
+
+	// 對密碼進行哈希加密
+	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
+	if err != nil {
+		WriteError(w, http.StatusInternalServerError, "Failed to hash password")
+		return
+	}
+
+	// 創建用戶
+	user := model.User{
+		ID:        fmt.Sprintf("usr_%d", time.Now().UnixNano()),
+		Username:  req.Username,
+		Email:     req.Email,
+		Password:  string(hashedPassword),
+		CreatedAt: time.Now(),
+	}
+
+	// 保存到數據庫
+	if err := s.Store.Create(user); err != nil {
+		WriteError(w, http.StatusInternalServerError, "Failed to create user: "+err.Error())
+		return
+	}
+
+	// 生成 JWT token
+	token, err := GenerateJWT(user.ID, user.Username, user.Email, 5) // 5分鐘過期
+	if err != nil {
+		WriteError(w, http.StatusInternalServerError, "Failed to generate token")
+		return
+	}
+
+	// 返回響應
+	response := AuthResponse{
+		Token:     token,
+		ExpiresAt: time.Now().Add(5 * time.Minute), // 與 GenerateJWT 的參數一致
+		User:      ToUserResponse(user),
+	}
+
+	WriteJSON(w, http.StatusCreated, response)
+}
+
+// HandleLogin 處理用戶登入請求
+// @Summary      用戶登入
+// @Description  使用郵箱和密碼登入，返回 JWT token
+// @Tags         auth
+// @Accept       json
+// @Produce      json
+// @Param        credentials  body      LoginRequest  true  "登入憑證"
+// @Success      200          {object}  AuthResponse
+// @Failure      400          {object}  ErrorResponse
+// @Failure      401          {object}  ErrorResponse  "郵箱或密碼錯誤"
+// @Failure      500          {object}  ErrorResponse
+// @Router       /auth/login [post]
+func (s *Server) HandleLogin(w http.ResponseWriter, r *http.Request) {
+	var req LoginRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		WriteError(w, http.StatusBadRequest, "Invalid request payload")
+		return
+	}
+
+	// 驗證必填字段
+	if req.Email == "" || req.Password == "" {
+		WriteError(w, http.StatusBadRequest, "Email and Password are required")
+		return
+	}
+
+	// 根據 email 查找用戶
+	user, err := s.Store.GetUserByEmail(req.Email)
+	if err != nil {
+		WriteError(w, http.StatusUnauthorized, "Invalid email or password")
+		return
+	}
+
+	// 驗證密碼
+	if err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(req.Password)); err != nil {
+		WriteError(w, http.StatusUnauthorized, "Invalid email or password")
+		return
+	}
+
+	// 生成 JWT token
+	token, err := GenerateJWT(user.ID, user.Username, user.Email, 5) // 5分鐘過期
+	if err != nil {
+		WriteError(w, http.StatusInternalServerError, "Failed to generate token")
+		return
+	}
+
+	// 返回響應
+	response := AuthResponse{
+		Token:     token,
+		ExpiresAt: time.Now().Add(5 * time.Minute),
+		User:      ToUserResponse(user),
+	}
+
+	WriteJSON(w, http.StatusOK, response)
+}
+
+// HandleRefreshToken 處理刷新 token 請求
+// @Summary      刷新 JWT token
+// @Description  使用舊的 token 刷新獲取新的 token（延長過期時間）
+// @Tags         auth
+// @Accept       json
+// @Produce      json
+// @Security     BearerAuth
+// @Success      200  {object}  AuthResponse
+// @Failure      401  {object}  ErrorResponse
+// @Failure      500  {object}  ErrorResponse
+// @Router       /auth/refresh [post]
+func (s *Server) HandleRefreshToken(w http.ResponseWriter, r *http.Request) {
+	// 從 header 中獲取 token
+	authHeader := r.Header.Get("Authorization")
+	if authHeader == "" {
+		WriteError(w, http.StatusUnauthorized, "Missing Authorization header")
+		return
+	}
+
+	// 解析 Bearer token
+	var tokenString string
+	if _, err := fmt.Sscanf(authHeader, "Bearer %s", &tokenString); err != nil {
+		WriteError(w, http.StatusUnauthorized, "Invalid token format")
+		return
+	}
+
+	// 刷新 token
+	newToken, err := RefreshJWT(tokenString)
+	if err != nil {
+		WriteError(w, http.StatusUnauthorized, "Invalid or expired token")
+		return
+	}
+
+	// 解析新 token 以獲取用戶信息
+	claims, err := ValidateJWT(newToken)
+	if err != nil {
+		WriteError(w, http.StatusInternalServerError, "Failed to parse new token")
+		return
+	}
+
+	// 從數據庫獲取用戶最新信息
+	user, err := s.Store.Get(claims.UserID)
+	if err != nil {
+		WriteError(w, http.StatusInternalServerError, "Failed to fetch user")
+		return
+	}
+
+	// 返回響應
+	response := AuthResponse{
+		Token:     newToken,
+		ExpiresAt: time.Now().Add(5 * time.Minute),
+		User:      ToUserResponse(user),
+	}
+
+	WriteJSON(w, http.StatusOK, response)
+}
+
+// ==========================================
+// 用戶管理相關的 Handlers (保留舊的，用於兼容)
+// ==========================================
+
+// CreateUserRequest 創建用戶請求結構（已廢棄，請使用 /auth/register）
 type CreateUserRequest struct {
 	Username string `json:"username" example:"john_doe" binding:"required"`
 	Email    string `json:"email" example:"john@example.com" binding:"required"`
 }
 
-// HandleCreateUser 處理建立使用者的請求
-// @Summary      創建新用戶
-// @Description  創建一個新的用戶帳號
-// @Tags         users
-// @Accept       json
-// @Produce      json
-// @Param        user  body      CreateUserRequest  true  "用戶資訊"
-// @Success      201   {object}  UserResponse
-// @Failure      400   {object}  ErrorResponse
-// @Failure      500   {object}  ErrorResponse
-// @Router       /users [post]
+// HandleCreateUser 處理建立使用者的請求（已廢棄，請使用 /auth/register）
 func (s *Server) HandleCreateUser(w http.ResponseWriter, r *http.Request) {
 	var req CreateUserRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {

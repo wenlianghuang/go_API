@@ -44,6 +44,19 @@ func (s *GormStore) List() ([]model.User, error) {
 	return users, result.Error
 }
 
+// GetUserByEmail 實作通過 email 查詢使用者
+func (s *GormStore) GetUserByEmail(email string) (model.User, error) {
+	var user model.User
+	result := s.db.Where("email = ?", email).First(&user)
+	if errors.Is(result.Error, gorm.ErrRecordNotFound) {
+		return model.User{}, errors.New("user not found")
+	}
+	if result.Error != nil {
+		return model.User{}, result.Error
+	}
+	return user, nil
+}
+
 // CreateDevice 實作建立設備
 func (s *GormStore) CreateDevice(dev *model.Device) error {
 	// GORM 的 Create 會自動處理 SQL Insert

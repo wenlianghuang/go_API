@@ -15,38 +15,38 @@ type contextKey string
 // 定義具體的 Key 值
 const UserIDKey contextKey = "userID"
 
-// 2. AuthMiddleware: 驗證並注入 User ID
+// 2. AuthMiddleware: 驗證 JWT Token 並注入 User ID
 func (s *Server) AuthMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// A. 取得 Header
+		// A. 取得 Authorization Header
 		authHeader := r.Header.Get("Authorization")
 		if authHeader == "" {
 			WriteError(w, http.StatusUnauthorized, "Missing Authorization header")
 			return
 		}
 
-		// B. 解析 Token (通常格式是 "Bearer <token>")
-		// 這裡我們先簡單模擬：假設 Token 必須是 "Bearer secret-token-123"
+		// B. 解析 Token (格式必須是 "Bearer <JWT-token>")
 		parts := strings.Split(authHeader, " ")
 		if len(parts) != 2 || parts[0] != "Bearer" {
-			WriteError(w, http.StatusUnauthorized, "Invalid token format")
+			WriteError(w, http.StatusUnauthorized, "Invalid token format, expected 'Bearer <token>'")
 			return
 		}
 
-		token := parts[1]
+		tokenString := parts[1]
 
-		// C. 驗證 Token (真實場景這裡會解密 JWT 或查 Redis)
-		// 這裡我們模擬：如果 token 是 "secret-token-123"，代表 UserID 是 "user_admin"
-		if token != "secret-token-123" {
-			WriteError(w, http.StatusUnauthorized, "Invalid token")
+		// C. 驗證並解析 JWT Token
+		claims, err := ValidateJWT(tokenString)
+		if err != nil {
+			WriteError(w, http.StatusUnauthorized, "Invalid or expired token: "+err.Error())
 			return
 		}
 
-		userID := "user_admin" // 模擬解出來的 ID
+		// D. 【關鍵】將解析出的 UserID 注入到 Context 中
+		// 這樣後續的 Handler 就可以通過 GetUserIDFromContext 取得當前用戶 ID
+		ctx := context.WithValue(r.Context(), UserIDKey, claims.UserID)
 
-		// D. 【關鍵】將 UserID 注入 Context
-		// r.WithContext 會建立一個新的 Request 副本，並帶有新的 Context
-		ctx := context.WithValue(r.Context(), UserIDKey, userID)
+		// 可選：也可以將完整的 claims 注入 context（如果需要 username, email 等）
+		// 這裡我們只注入 UserID，保持簡單
 
 		// E. 呼叫下一個 Handler，並傳入帶有新 Context 的 Request
 		next.ServeHTTP(w, r.WithContext(ctx))

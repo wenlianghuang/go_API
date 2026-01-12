@@ -5,6 +5,34 @@ import (
 	"time"
 )
 
+// ==========================================
+// 認證相關的 DTO
+// ==========================================
+
+// RegisterRequest 註冊請求結構
+type RegisterRequest struct {
+	Username string `json:"username" example:"john_doe" binding:"required"`
+	Email    string `json:"email" example:"john@example.com" binding:"required"`
+	Password string `json:"password" example:"SecurePassword123" binding:"required"`
+}
+
+// LoginRequest 登入請求結構
+type LoginRequest struct {
+	Email    string `json:"email" example:"john@example.com" binding:"required"`
+	Password string `json:"password" example:"SecurePassword123" binding:"required"`
+}
+
+// AuthResponse 認證響應結構（包含 JWT token）
+type AuthResponse struct {
+	Token     string       `json:"token"`
+	ExpiresAt time.Time    `json:"expires_at"`
+	User      UserResponse `json:"user"`
+}
+
+// ==========================================
+// 使用者相關的 DTO
+// ==========================================
+
 // UserResponse 使用者響應結構
 type UserResponse struct {
 	ID        string    `json:"id"`
