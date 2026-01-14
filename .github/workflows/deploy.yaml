@@ -43,7 +43,7 @@ jobs:
   run-migrations:
     needs: push-to-ghcr
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main'
+    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/CICD-test'
     
     steps:
       - name: Checkout code
@@ -94,7 +94,7 @@ jobs:
   deploy:
     needs: [push-to-ghcr, run-migrations]
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main'
+    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/CICD-test'
     
     steps:
       - name: Checkout code
