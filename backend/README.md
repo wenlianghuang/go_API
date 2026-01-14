@@ -74,6 +74,7 @@ curl -X POST http://localhost:8080/devices \
 - 📖 [API 文檔](docs/API.md) - 完整的 API 端點說明和請求範例
 - 🐳 [部署指南](docs/DEPLOYMENT.md) - Docker 部署詳細說明（三種方式）
 - 🔌 [WebSocket & Redis](docs/WEBSOCKET.md) - 實時推播機制詳細說明
+- 🗄️ [資料庫遷移](docs/MIGRATION.md) - 資料庫遷移完整指南
 - 🏗 [架構設計](docs/ARCHITECTURE.md) - 系統架構和設計原則
 - 🔧 [故障排除](docs/TROUBLESHOOTING.md) - 常見問題解決方案
 
@@ -181,10 +182,16 @@ go test -v ./main_test.go
 go test -cover ./...
 ```
 
+## 🗄️ 資料庫遷移
+
+本專案使用 [golang-migrate](https://github.com/golang-migrate/migrate) 進行資料庫版本管理，替代 GORM AutoMigrate。
+
+詳細的遷移指南請參考 [資料庫遷移文檔](docs/MIGRATION.md)。
+
 ## 📝 注意事項
 
-1. **認證 Token**：目前使用硬編碼的 token `secret-token-123`，生產環境應使用 JWT 或其他安全機制
-2. **資料庫遷移**：應用程式啟動時會自動執行 `AutoMigrate`，生產環境建議使用專業的遷移工具
+1. **認證 Token**：目前使用 JWT 認證機制，詳見 [JWT 認證文檔](JWT_MIGRATION_SUMMARY.md)
+2. **資料庫遷移**：現已改用 golang-migrate 進行版本化管理，詳見 [資料庫遷移文檔](docs/MIGRATION.md)
 3. **錯誤處理**：目前為簡化版本，生產環境需要更完善的錯誤處理和日誌記錄
 4. **連接池**：已設置連接池參數，可根據實際負載調整
 

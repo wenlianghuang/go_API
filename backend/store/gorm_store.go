@@ -14,11 +14,8 @@ type GormStore struct {
 
 // NewGormStore 是一個工廠函式
 func NewGormStore(db *gorm.DB) (*GormStore, error) {
-	// 自動遷移
-	err := db.AutoMigrate(&model.Device{}, &model.Telemetry{}, &model.User{})
-	if err != nil {
-		return nil, err
-	}
+	// 資料庫遷移現在由 golang-migrate 處理
+	// 請確保在啟動應用程式前已執行遷移：./scripts/migrate.sh up
 	return &GormStore{db: db}, nil
 }
 
