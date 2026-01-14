@@ -56,8 +56,7 @@ func main() {
 	fmt.Println("✅ 成功連接到 PostgreSQL")
 
 	// 3. 資料庫遷移現在使用 golang-migrate
-	// 請在啟動應用程式前執行：./scripts/migrate.sh up
-	// 或在 Docker 環境中會自動執行遷移
+	// 請在啟動應用程式前執行：./scripts/docker-migrate.sh up
 
 	// 4. 設定連線池 (Connection Pool) - 生產環境必備
 	sqlDB, err := db.DB()
