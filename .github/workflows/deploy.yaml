@@ -4,7 +4,6 @@ on:
   push:
     branches: 
       - "main"
-      - "CICD-test"
 
 env:
   REGISTRY: ghcr.io
