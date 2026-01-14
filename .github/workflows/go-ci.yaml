@@ -12,6 +12,21 @@ jobs:
     # 由於我們需要暫時修正 go.mod，這裡先使用一個單一的最新穩定版本，避免矩陣複雜化
     runs-on: ubuntu-latest
     
+    services:
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: password
+          POSTGRES_DB: iot_db_test
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+    
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -25,7 +40,15 @@ jobs:
           cache: true
           cache-dependency-path: backend/go.sum 
 
-      # 【關鍵修正點：Step 1 - 暫時修正 go.mod 版本】
+      # 【關鍵修正點：Step 1 - 安裝 golang-migrate】
+      - name: Install golang-migrate
+        run: |
+          curl -L https://github.com/golang-migrate/migrate/releases/download/v4.17.0/migrate.linux-amd64.tar.gz | tar xvz
+          sudo mv migrate /usr/local/bin/migrate
+          chmod +x /usr/local/bin/migrate
+          migrate -version
+      
+      # Step 2: 暫時修正 go.mod 版本
       - name: Patch go.mod version for CI
         run: |
           cd backend
@@ -36,29 +59,38 @@ jobs:
           echo "Patched go.mod content:"
           cat go.mod
           
-      # Step 2: 下載 Go Modules 依賴 (使用修正後的 go.mod)
+      # Step 3: 下載 Go Modules 依賴 (使用修正後的 go.mod)
       - name: Download Go modules
         run: |
           cd backend 
           go mod tidy
       
-      # Step 3: 執行測試與品質檢查
+      # Step 4: 執行資料庫遷移
+      - name: Run database migrations
+        env:
+          DATABASE_URL: "postgres://postgres:password@localhost:5432/iot_db_test?sslmode=disable"
+        run: |
+          cd backend
+          migrate -path ./migrations -database "$DATABASE_URL" up
+      
+      # Step 5: 執行測試與品質檢查
       - name: Run checks and tests
         env:
           JWT_SECRET: ci-test-secret-not-for-production
+          DB_DSN: "host=localhost user=postgres password=password dbname=iot_db_test port=5432 sslmode=disable TimeZone=UTC"
         run: |
           cd backend
           test -z "$(gofmt -l .)"  # 檢查格式
           go vet ./...              # 執行靜態分析
           go test -v -race -coverprofile=coverage.txt ./... # 執行測試
         
-      # Step 4: 建構 Go 應用程式
+      # Step 6: 建構 Go 應用程式
       - name: Build application
         run: |
           cd backend
           go build -o backend-binary
         
-      # Step 5: 上傳建構成品
+      # Step 7: 上傳建構成品
       - name: Upload Build Artifact
         uses: actions/upload-artifact@v4
         with:

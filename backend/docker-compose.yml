@@ -28,6 +28,9 @@ services:
       - .env
     environment:
       DB_DSN: "host=postgres user=postgres password=password dbname=iot_db port=5432 sslmode=disable TimeZone=Asia/Taipei"
+      DB_USER: postgres
+      DB_PASSWORD: password
+      DB_NAME: iot_db
       API_PORT: "8080"
       METRICS_PORT: "9090"
     depends_on:

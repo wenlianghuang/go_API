@@ -14,9 +14,8 @@ import (
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 
-	"my-api/api" // 假設這是你放 Server 的地方
-	"my-api/model"
-	"my-api/store"
+	"my-api/api"   // 假設這是你放 Server 的地方
+	"my-api/store" // 資料存取層
 
 	_ "my-api/docs" // swagger docs
 )
@@ -56,14 +55,8 @@ func main() {
 	}
 	fmt.Println("✅ 成功連接到 PostgreSQL")
 
-	// 3. 自動遷移 (Auto Migration) - GORM 神技
-	// 這行程式碼會自動在資料庫建立 users, devices 和 telemetries 資料表
-	// ⚠️ 注意順序：必須先遷移 User（被引用的表），再遷移 Device（引用 User 的表）
-	// 因為 Device 有外鍵 UserID 引用 User.ID，Telemetry 有外鍵 DeviceID 引用 Device.ID
-	// 正確的依賴順序：User → Device → Telemetry
-	if err := db.AutoMigrate(&model.User{}, &model.Device{}, &model.Telemetry{}); err != nil {
-		log.Fatalf("資料庫遷移失敗: %v", err)
-	}
+	// 3. 資料庫遷移現在使用 golang-migrate
+	// 請在啟動應用程式前執行：./scripts/docker-migrate.sh up
 
 	// 4. 設定連線池 (Connection Pool) - 生產環境必備
 	sqlDB, err := db.DB()
