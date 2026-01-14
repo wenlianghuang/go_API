@@ -4,6 +4,10 @@ on:
   push:
     branches: [ "main" ]
 
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
 jobs:
   push-to-ghcr:
     runs-on: ubuntu-latest
@@ -33,3 +37,71 @@ jobs:
           tags: |
             ghcr.io/${{ steps.repo.outputs.name }}/my-api:latest
             ghcr.io/${{ steps.repo.outputs.name }}/my-api:${{ github.sha }}
+
+  run-migrations:
+    needs: push-to-ghcr
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Verify database secret exists
+        run: |
+          if [ -z "${{ secrets.PRODUCTION_DATABASE_URL }}" ]; then
+            echo "❌ Error: PRODUCTION_DATABASE_URL secret is not set"
+            echo "Please configure it in: Settings → Secrets and variables → Actions"
+            exit 1
+          fi
+          echo "✅ Database secret is configured"
+
+      - name: Install golang-migrate
+        run: |
+          curl -L https://github.com/golang-migrate/migrate/releases/download/v4.17.0/migrate.linux-amd64.tar.gz | tar xvz
+          sudo mv migrate /usr/local/bin/migrate
+          chmod +x /usr/local/bin/migrate
+          migrate -version
+
+      - name: Check current migration version
+        env:
+          DATABASE_URL: ${{ secrets.PRODUCTION_DATABASE_URL }}
+        run: |
+          cd backend
+          echo "🔍 Checking current migration version..."
+          migrate -path ./migrations -database "$DATABASE_URL" version || echo "No migrations applied yet"
+        continue-on-error: true
+
+      - name: Run database migrations
+        env:
+          DATABASE_URL: ${{ secrets.PRODUCTION_DATABASE_URL }}
+        run: |
+          cd backend
+          echo "🚀 Running database migrations..."
+          migrate -path ./migrations -database "$DATABASE_URL" up
+          echo "✅ Migrations completed successfully"
+
+      - name: Verify migration version
+        env:
+          DATABASE_URL: ${{ secrets.PRODUCTION_DATABASE_URL }}
+        run: |
+          cd backend
+          echo "📊 Final migration version:"
+          migrate -path ./migrations -database "$DATABASE_URL" version
+
+  deploy:
+    needs: [push-to-ghcr, run-migrations]
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Deploy to production
+        run: |
+          echo "🚀 Deployment step"
+          echo "Image: ghcr.io/${{ github.repository }}/my-api:${{ github.sha }}"
+          echo "✅ Deployment configuration ready"
+          # 在這裡添加您的實際部署腳本
+          # 例如：SSH 到服務器、使用 kubectl、使用 docker-compose 等
