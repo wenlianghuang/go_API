@@ -16,8 +16,18 @@ var validate *validator.Validate
 func init() {
 	validate = validator.New()
 
-	// 可以在这里注册自定义验证规则
-	// 例如：validate.RegisterValidation("custom_rule", customValidationFunc)
+	validate.RegisterValidation("alphanum_underscore", func(fl validator.FieldLevel) bool {
+		value := fl.Field().String()
+		for _, char := range value {
+			if !((char >= 'a' && char <= 'z') ||
+				(char >= 'A' && char <= 'Z') ||
+				(char >= '0' && char <= '9') ||
+				char == '_' || char == '.' || char == ' ') {
+				return false
+			}
+		}
+		return true
+	})
 }
 
 // ValidateStruct 验证结构体
@@ -116,6 +126,8 @@ func formatErrorMessage(e validator.FieldError) string {
 		return fmt.Sprintf("%s must be equal to %s", field, e.Param())
 	case "datetime":
 		return fmt.Sprintf("%s must be a valid datetime in format: %s", field, e.Param())
+	case "alphanum_underscore":
+		return fmt.Sprintf("%s must contain only alphanumeric characters and underscores", field)
 	default:
 		return fmt.Sprintf("%s is invalid", field)
 	}

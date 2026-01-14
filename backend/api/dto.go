@@ -11,7 +11,7 @@ import (
 
 // RegisterRequest 註冊請求結構
 type RegisterRequest struct {
-	Username string `json:"username" validate:"required,min=3,max=50,alphanum" example:"john_doe"`
+	Username string `json:"username" validate:"required,min=3,max=50,alphanum_underscore" example:"john_doe"`
 	Email    string `json:"email" validate:"required,email" example:"john@example.com"`
 	Password string `json:"password" validate:"required,min=6,max=100" example:"SecurePassword123"`
 }
