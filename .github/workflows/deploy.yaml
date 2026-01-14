@@ -56,7 +56,7 @@ jobs:
             echo "Please configure it in: Settings → Secrets and variables → Actions"
             exit 1
           fi
-          echo "✅ Database secret is configured"
+          echo "✅ Database secret is configured good"
 
       - name: Install golang-migrate
         run: |
