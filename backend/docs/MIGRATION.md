@@ -103,6 +103,233 @@ docker-compose build api
 docker-compose up -d api
 ```
 
+## 🆕 創建新表的完整流程
+
+以下說明如何從零開始創建一個新的資料庫表，包含遷移文件、Go Model 和 Store 層的完整步驟。
+
+### 步驟 1：創建遷移文件
+
+```bash
+cd /Users/matthuang/Desktop/go_API/backend
+
+# 創建新的遷移文件（例如：創建 notifications 表）
+./scripts/migrate.sh create create_notifications_table
+```
+
+這會生成兩個檔案：
+- `000005_create_notifications_table.up.sql`（創建表）
+- `000005_create_notifications_table.down.sql`（刪除表）
+
+### 步驟 2：編寫 UP 遷移（創建表）
+
+編輯 `migrations/000005_create_notifications_table.up.sql`：
+
+```sql
+CREATE TABLE notifications (
+    id SERIAL PRIMARY KEY,
+    user_id VARCHAR(255) NOT NULL,
+    title VARCHAR(255) NOT NULL,
+    message TEXT NOT NULL,
+    type VARCHAR(50) DEFAULT 'info',  -- 'info', 'warning', 'error'
+    is_read BOOLEAN DEFAULT false,
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+    deleted_at TIMESTAMP WITH TIME ZONE,
+    
+    CONSTRAINT fk_notifications_user FOREIGN KEY (user_id) 
+        REFERENCES users(id) ON DELETE CASCADE
+);
+
+-- 創建索引
+CREATE INDEX idx_notifications_user_id ON notifications(user_id);
+CREATE INDEX idx_notifications_is_read ON notifications(is_read);
+CREATE INDEX idx_notifications_created_at ON notifications(created_at);
+CREATE INDEX idx_notifications_deleted_at ON notifications(deleted_at);
+```
+
+### 步驟 3：編寫 DOWN 遷移（刪除表）
+
+編輯 `migrations/000005_create_notifications_table.down.sql`：
+
+```sql
+DROP TABLE IF EXISTS notifications;
+```
+
+### 步驟 4：創建 Go Model
+
+在 `model/` 目錄下創建新檔案，例如 `model/notification.go`：
+
+```go
+package model
+
+import (
+	"time"
+	"gorm.io/gorm"
+)
+
+// Notification 代表一個通知
+type Notification struct {
+	gorm.Model
+	
+	UserID  string `gorm:"not null" json:"user_id"`
+	Title   string `gorm:"size:255;not null" json:"title"`
+	Message string `gorm:"type:text;not null" json:"message"`
+	Type    string `gorm:"size:50;default:'info'" json:"type"` // 'info', 'warning', 'error'
+	IsRead  bool   `gorm:"default:false" json:"is_read"`
+	
+	// 關聯（可選）
+	User User `gorm:"foreignKey:UserID" json:"user,omitempty"`
+}
+```
+
+### 步驟 5：更新 Store 層（如果需要）
+
+在 `store/gorm_store.go` 中添加相關方法：
+
+```go
+// CreateNotification 創建通知
+func (s *GormStore) CreateNotification(notif *model.Notification) error {
+	return s.db.Create(notif).Error
+}
+
+// GetNotificationByID 查詢單一通知
+func (s *GormStore) GetNotificationByID(id uint) (*model.Notification, error) {
+	var notif model.Notification
+	result := s.db.First(&notif, id)
+	if errors.Is(result.Error, gorm.ErrRecordNotFound) {
+		return nil, errors.New("notification not found")
+	}
+	if result.Error != nil {
+		return nil, result.Error
+	}
+	return &notif, nil
+}
+
+// ListNotificationsByUserID 查詢用戶的所有通知
+func (s *GormStore) ListNotificationsByUserID(userID string) ([]model.Notification, error) {
+	var notifications []model.Notification
+	result := s.db.Where("user_id = ?", userID).Order("created_at DESC").Find(&notifications)
+	return notifications, result.Error
+}
+```
+
+### 步驟 6：重新構建 Docker 鏡像
+
+```bash
+# 重新構建 API 鏡像（包含新的遷移文件）
+docker-compose build api
+
+# 或者完全重建
+docker-compose build --no-cache api
+```
+
+### 步驟 7：執行遷移
+
+```bash
+# 使用 Docker 方式執行遷移（推薦）
+./scripts/docker-migrate.sh up
+
+# 或者如果容器已啟動，遷移會自動執行
+docker-compose up -d api
+```
+
+### 步驟 8：驗證遷移
+
+```bash
+# 檢查遷移版本
+./scripts/docker-migrate.sh version
+# 應該顯示：5
+
+# 檢查表是否創建
+docker-compose exec postgres psql -U postgres -d iot_db -c "\d notifications"
+
+# 檢查表結構
+docker-compose exec postgres psql -U postgres -d iot_db -c "\d+ notifications"
+```
+
+### 步驟 9：測試回滾（可選但推薦）
+
+```bash
+# 測試向下遷移（回滾）
+./scripts/docker-migrate.sh down
+
+# 驗證表被刪除
+docker-compose exec postgres psql -U postgres -d iot_db -c "\d notifications"
+# 應該顯示：relation "notifications" does not exist
+
+# 再次執行向上遷移
+./scripts/docker-migrate.sh up
+
+# 驗證表重新創建
+docker-compose exec postgres psql -U postgres -d iot_db -c "\d notifications"
+```
+
+### 步驟 10：提交到 Git
+
+```bash
+# 添加新檔案
+git add migrations/000005_*.sql
+git add model/notification.go
+git add store/gorm_store.go  # 如果有修改
+
+# 提交
+git commit -m "feat: add notifications table migration"
+```
+
+### 完整流程總結
+
+```
+1. 創建遷移文件
+   ↓
+2. 編寫 .up.sql（CREATE TABLE）
+   ↓
+3. 編寫 .down.sql（DROP TABLE）
+   ↓
+4. 創建 Go Model
+   ↓
+5. 更新 Store 層（可選）
+   ↓
+6. 重新構建 Docker 鏡像
+   ↓
+7. 執行遷移（up）
+   ↓
+8. 驗證遷移成功
+   ↓
+9. 測試回滾（down/up）
+   ↓
+10. 提交到 Git
+```
+
+### 重要提示
+
+1. **遷移文件命名**：使用描述性名稱，例如 `create_notifications_table`、`add_user_avatar_column`
+2. **外鍵約束**：如果有外鍵，確保引用的表已存在（按遷移順序）
+3. **索引**：為常用查詢欄位創建索引
+4. **軟刪除**：如果需要軟刪除，添加 `deleted_at` 欄位
+5. **時間戳**：通常包含 `created_at` 和 `updated_at`
+6. **測試回滾**：在提交前測試 `down` 遷移
+
+### 快速參考範例
+
+```bash
+# 1. 創建遷移
+./scripts/migrate.sh create create_notifications_table
+
+# 2. 編輯 up.sql 和 down.sql（手動編輯檔案）
+
+# 3. 創建 model/notification.go（手動創建檔案）
+
+# 4. 重新構建
+docker-compose build api
+
+# 5. 執行遷移
+./scripts/docker-migrate.sh up
+
+# 6. 驗證
+./scripts/docker-migrate.sh version
+docker-compose exec postgres psql -U postgres -d iot_db -c "\d notifications"
+```
+
 ## 🔧 常見操作
 
 ### Docker 環境（推薦）
