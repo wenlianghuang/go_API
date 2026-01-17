@@ -28,9 +28,16 @@ func (m *MockStore) Create(u model.User) error {
 }
 
 // 實作其他方法以滿足介面 (雖然這次測試用不到)
-func (m *MockStore) Get(id string) (model.User, error)               { return model.User{}, nil }
-func (m *MockStore) GetUserByEmail(email string) (model.User, error) { return model.User{}, nil }
-func (m *MockStore) List() ([]model.User, error)                     { return nil, nil }
+func (m *MockStore) Get(id string) (model.User, error) { return model.User{}, nil }
+func (m *MockStore) GetUserByEmail(email string) (model.User, error) {
+	// 如果 ShouldError 為 true，返回錯誤表示用戶已存在
+	if m.ShouldError {
+		return model.User{}, errors.New("user already exists")
+	}
+	// 否則返回錯誤表示用戶不存在（這樣註冊才能成功）
+	return model.User{}, errors.New("user not found")
+}
+func (m *MockStore) List() ([]model.User, error) { return nil, nil }
 
 // 實作 Storage 介面的設備相關方法
 func (m *MockStore) CreateDevice(dev *model.Device) error               { return nil }
@@ -81,19 +88,19 @@ func TestHandleCreateUser(t *testing.T) {
 	}{
 		{
 			name:           "Success_CreateUser",
-			inputBody:      map[string]interface{}{"username": "testuser", "email": "test@example.com"},
+			inputBody:      map[string]interface{}{"username": "testuser", "email": "test@example.com", "password": "password123"},
 			mockShouldErr:  false,
 			expectedStatus: http.StatusCreated, // 預期 201
 		},
 		{
 			name:           "Fail_MissingFields",
-			inputBody:      map[string]interface{}{"username": ""}, // 缺少 email
+			inputBody:      map[string]interface{}{"username": ""}, // 缺少 email 和 password
 			mockShouldErr:  false,
 			expectedStatus: http.StatusBadRequest, // 預期 400
 		},
 		{
 			name:           "Fail_DatabaseError",
-			inputBody:      map[string]interface{}{"username": "testuser", "email": "db_error@test.com"},
+			inputBody:      map[string]interface{}{"username": "testuser", "email": "db_error@test.com", "password": "password123"},
 			mockShouldErr:  true,                           // 模擬資料庫壞掉
 			expectedStatus: http.StatusInternalServerError, // 預期 500
 		},
@@ -109,7 +116,7 @@ func TestHandleCreateUser(t *testing.T) {
 			// 2. 準備請求 (Act)
 			// 把 map 轉成 json body
 			bodyBytes, _ := json.Marshal(tt.inputBody)
-			req := httptest.NewRequest(http.MethodPost, "/users", bytes.NewBuffer(bodyBytes))
+			req := httptest.NewRequest(http.MethodPost, "/auth/register", bytes.NewBuffer(bodyBytes))
 			req.Header.Set("Content-Type", "application/json")
 
 			// httptest.NewRecorder 是一個 "假的" ResponseWriter
@@ -117,7 +124,7 @@ func TestHandleCreateUser(t *testing.T) {
 			rr := httptest.NewRecorder()
 
 			// 直接呼叫 Handler (這裡不需要經過 Router，直接測函數邏輯)
-			// 注意：我們是測 srv.HandleCreateUser，這就是依賴注入的好處
+			// 注意：現在測試 HandleRegister，因為 HandleCreateUser 已經 deprecated
 			handler := http.HandlerFunc(srv.HandleRegister)
 			handler.ServeHTTP(rr, req)
 
@@ -129,12 +136,15 @@ func TestHandleCreateUser(t *testing.T) {
 
 			// 如果是成功案例，我們可以進一步檢查回傳的 JSON 內容
 			if !tt.mockShouldErr && tt.expectedStatus == http.StatusCreated {
-				var createdUser model.User
-				json.NewDecoder(rr.Body).Decode(&createdUser)
+				var response map[string]interface{}
+				json.NewDecoder(rr.Body).Decode(&response)
 
-				if createdUser.Username != tt.inputBody["username"] {
-					t.Errorf("handler returned unexpected body: got username %v want %v",
-						createdUser.Username, tt.inputBody["username"])
+				// HandleRegister 返回的是 AuthResponse，包含 user 對象
+				if user, ok := response["user"].(map[string]interface{}); ok {
+					if user["username"] != tt.inputBody["username"] {
+						t.Errorf("handler returned unexpected body: got username %v want %v",
+							user["username"], tt.inputBody["username"])
+					}
 				}
 			}
 		})
