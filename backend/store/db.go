@@ -231,3 +231,13 @@ func (s *MemoryStore) PatchTelemetry(id uint, updates map[string]interface{}) er
 	s.telemetries[id] = tel
 	return nil
 }
+
+func (s *MemoryStore) DeleteTelemetry(id uint) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if _, ok := s.telemetries[id]; !ok {
+		return fmt.Errorf("telemetry not found")
+	}
+	delete(s.telemetries, id)
+	return nil
+}
