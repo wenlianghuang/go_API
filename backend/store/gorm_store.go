@@ -196,3 +196,23 @@ func (s *GormStore) PatchTelemetry(id uint, updates map[string]interface{}) erro
 	}
 	return nil
 }
+
+// DeleteTelemetry 刪除遙測數據
+func (s *GormStore) DeleteTelemetry(id uint) error {
+	// 先檢查遙測數據是否存在
+	var existingTelemetry model.Telemetry
+	result := s.db.First(&existingTelemetry, id)
+	if errors.Is(result.Error, gorm.ErrRecordNotFound) {
+		return errors.New("telemetry not found")
+	}
+	if result.Error != nil {
+		return result.Error
+	}
+
+	// 刪除遙測數據
+	deleteResult := s.db.Delete(&existingTelemetry, id)
+	if deleteResult.Error != nil {
+		return deleteResult.Error
+	}
+	return nil
+}
