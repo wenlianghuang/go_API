@@ -158,6 +158,8 @@ func (s *Server) mountRoutes() {
 		r.Post("/telemetries", s.HandleCreateTelemetry)
 		// Patch telemetry
 		r.Patch("/telemetries/{id}", s.HandlePatchTelemetry)
+		// Delete telemetry
+		r.Delete("/telemetries/{id}", s.HandleDeleteTelemetry)
 		// Test Analyze Device
 		r.Post("/devices/{id}/analyze", s.HandleAnalyzeDevice)
 

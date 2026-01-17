@@ -65,6 +65,12 @@ func (m *MockStore) PatchTelemetry(id uint, updates map[string]interface{}) erro
 	}
 	return nil
 }
+func (m *MockStore) DeleteTelemetry(id uint) error {
+	if m.ShouldError {
+		return errors.New("mock delete error")
+	}
+	return nil
+}
 func TestHandleCreateUser(t *testing.T) {
 	// 定義測試表格 (Table)
 	tests := []struct {

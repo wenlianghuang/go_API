@@ -99,6 +99,11 @@ func (m *MockStore) PatchTelemetry(id uint, updates map[string]interface{}) erro
 	return args.Error(0)
 }
 
+func (m *MockStore) DeleteTelemetry(id uint) error {
+	args := m.Called(id)
+	return args.Error(0)
+}
+
 func TestHandleRegister_Success(t *testing.T) {
 	// 1. 初始化
 	mockStore := new(MockStore)

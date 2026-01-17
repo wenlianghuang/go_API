@@ -182,3 +182,43 @@ func (s *Server) HandlePatchTelemetry(w http.ResponseWriter, r *http.Request) {
 	// 使用 deviceID 發布到具體的 topic (device:{id}) - WebSocket 廣播保留在 handler 層
 	s.Hub.BroadcastToDevice(result.Telemetry.DeviceID, ToTelemetryResponse(*result.Telemetry))
 }
+
+// HandleDeleteTelemetry 處理刪除遙測數據的請求
+// @Summary      刪除遙測數據
+// @Description  根據遙測數據 ID 刪除指定的遙測數據記錄
+// @Tags         telemetries
+// @Accept       json
+// @Produce      json
+// @Security     BearerAuth
+// @Param        id   path      int  true  "遙測數據 ID"
+// @Success      200  {object}  map[string]string
+// @Failure      400  {object}  ErrorResponse
+// @Failure      401  {object}  ErrorResponse
+// @Failure      404  {object}  ErrorResponse
+// @Failure      500  {object}  ErrorResponse
+// @Router       /telemetries/{id} [delete]
+func (s *Server) HandleDeleteTelemetry(w http.ResponseWriter, r *http.Request) {
+	// 1. 解析 ID
+	idStr := chi.URLParam(r, "id")
+	id, err := strconv.ParseUint(idStr, 10, 32)
+	if err != nil {
+		WriteError(w, http.StatusBadRequest, "Invalid telemetry ID")
+		return
+	}
+
+	// 2. 調用 service 執行業務邏輯
+	err = s.TelemetryService.DeleteTelemetry(uint(id))
+	if err != nil {
+		// 處理錯誤並轉換為適當的 HTTP 狀態碼
+		errMsg := err.Error()
+		if strings.Contains(errMsg, "telemetry not found") {
+			WriteError(w, http.StatusNotFound, "Telemetry not found")
+			return
+		}
+		WriteError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	// 3. 返回成功響應
+	WriteJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
+}

@@ -143,3 +143,19 @@ func (s *TelemetryService) PatchTelemetry(telemetryID uint, input PatchTelemetry
 
 	return result, nil
 }
+
+// DeleteTelemetry 處理刪除遙測數據業務邏輯
+func (s *TelemetryService) DeleteTelemetry(telemetryID uint) error {
+	// 驗證遙測數據是否存在
+	_, err := s.store.GetTelemetryByID(telemetryID)
+	if err != nil {
+		return fmt.Errorf("telemetry not found")
+	}
+
+	// 執行刪除
+	if err := s.store.DeleteTelemetry(telemetryID); err != nil {
+		return fmt.Errorf("failed to delete telemetry: %w", err)
+	}
+
+	return nil
+}
