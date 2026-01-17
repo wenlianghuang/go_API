@@ -2,6 +2,7 @@ package api
 
 import (
 	"errors"
+	"my-api/service"
 	"os"
 	"time"
 
@@ -25,6 +26,50 @@ type Claims struct {
 	Username string `json:"username"`
 	Email    string `json:"email"`
 	jwt.RegisteredClaims
+}
+
+// JWTService 實現 service.JWTGenerator 接口
+type JWTService struct{}
+
+// NewJWTService 創建一個新的 JWTService 實例
+func NewJWTService() *JWTService {
+	return &JWTService{}
+}
+
+// GenerateJWT 實現 service.JWTGenerator 接口
+func (j *JWTService) GenerateJWT(userID, username, email string, expirationHours int) (string, error) {
+	return GenerateJWT(userID, username, email, expirationHours)
+}
+
+// RefreshJWT 實現 service.JWTGenerator 接口
+func (j *JWTService) RefreshJWT(oldTokenString string) (string, error) {
+	return RefreshJWT(oldTokenString)
+}
+
+// ValidateJWT 實現 service.JWTGenerator 接口
+func (j *JWTService) ValidateJWT(tokenString string) (service.JWTClaims, error) {
+	claims, err := ValidateJWT(tokenString)
+	if err != nil {
+		return nil, err
+	}
+	return &ClaimsAdapter{claims: claims}, nil
+}
+
+// ClaimsAdapter 適配 Claims 以實現 service.JWTClaims 接口
+type ClaimsAdapter struct {
+	claims *Claims
+}
+
+func (c *ClaimsAdapter) GetUserID() string {
+	return c.claims.UserID
+}
+
+func (c *ClaimsAdapter) GetUsername() string {
+	return c.claims.Username
+}
+
+func (c *ClaimsAdapter) GetEmail() string {
+	return c.claims.Email
 }
 
 // GenerateJWT 生成一個新的 JWT token

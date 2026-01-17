@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"fmt"
+	"my-api/service"
 	"my-api/store"
 	"net/http"
 	"sync"
@@ -16,10 +17,13 @@ import (
 
 // Server 結構體持有所有的依賴 (Router 和 Storage)
 type Server struct {
-	Router   *chi.Mux
-	Store    store.Storage // 注意：這裡依賴的是 Storage Interface，而不是具體的 struct
-	TaskChan chan uint     // 存放設備 ID 的任務通道
-	Hub      *Hub          // 存放 WebSocket 的 Hub
+	Router           *chi.Mux
+	Store            store.Storage             // 注意：這裡依賴的是 Storage Interface，而不是具體的 struct
+	AuthService      *service.AuthService      // 認證服務
+	DeviceService    *service.DeviceService    // 設備服務
+	TelemetryService *service.TelemetryService // 遙測數據服務
+	TaskChan         chan uint                 // 存放設備 ID 的任務通道
+	Hub              *Hub                      // 存放 WebSocket 的 Hub
 
 	// 🆕 優雅停機支援
 	workerWg     sync.WaitGroup     // 用於等待 worker goroutine 完成
@@ -38,12 +42,15 @@ func NewServer(store store.Storage, redisAddr string) *Server {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	s := &Server{
-		Router:       chi.NewRouter(),
-		Store:        store,
-		TaskChan:     make(chan uint, 100), // 設定通道大小為 100
-		Hub:          NewHub(rdb),
-		workerCtx:    ctx,    // 🆕 儲存 context
-		workerCancel: cancel, // 🆕 儲存 cancel 函數
+		Router:           chi.NewRouter(),
+		Store:            store,
+		AuthService:      service.NewAuthService(store, NewJWTService()),
+		DeviceService:    service.NewDeviceService(store),
+		TelemetryService: service.NewTelemetryService(store),
+		TaskChan:         make(chan uint, 100), // 設定通道大小為 100
+		Hub:              NewHub(rdb),
+		workerCtx:        ctx,    // 🆕 儲存 context
+		workerCancel:     cancel, // 🆕 儲存 cancel 函數
 	}
 
 	// 🆕 使用 WaitGroup 追蹤 worker goroutine，以便停機時等待

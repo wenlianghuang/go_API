@@ -112,7 +112,7 @@ func TestHandleCreateUser(t *testing.T) {
 
 			// 直接呼叫 Handler (這裡不需要經過 Router，直接測函數邏輯)
 			// 注意：我們是測 srv.HandleCreateUser，這就是依賴注入的好處
-			handler := http.HandlerFunc(srv.HandleCreateUser)
+			handler := http.HandlerFunc(srv.HandleRegister)
 			handler.ServeHTTP(rr, req)
 
 			// 3. 驗證結果 (Assert)

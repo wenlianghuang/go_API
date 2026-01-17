@@ -33,6 +33,12 @@ type AuthResponse struct {
 // 使用者相關的 DTO
 // ==========================================
 
+// CreateUserRequest 創建用戶請求結構（已廢棄，請使用 /auth/register）
+type CreateUserRequest struct {
+	Username string `json:"username" validate:"required,min=3,max=50" example:"john_doe"`
+	Email    string `json:"email" validate:"required,email" example:"john@example.com"`
+}
+
 // UserResponse 使用者響應結構
 type UserResponse struct {
 	ID        string    `json:"id"`
@@ -56,6 +62,54 @@ type DeviceResponse struct {
 	IsActive   bool   `json:"is_active"`
 	// 這裡只放入 DTO 版本的 Telemetry
 	Telemetries []TelemetryResponse `json:"telemetries"`
+}
+
+// ==========================================
+// 設備相關的 Request DTOs
+// ==========================================
+
+// CreateDeviceRequest 創建設備請求結構
+type CreateDeviceRequest struct {
+	Name       string `json:"name" validate:"required,min=1,max=100" example:"Temperature Sensor 1"`
+	Type       string `json:"type" validate:"omitempty" example:"Sensor"`
+	MacAddress string `json:"mac_address" validate:"required,mac" example:"00:11:22:33:44:55"`
+	IsActive   bool   `json:"is_active" example:"true"`
+}
+
+// UpdateDeviceRequest 更新設備請求結構
+type UpdateDeviceRequest struct {
+	Name       string `json:"name" validate:"required,min=1,max=100" example:"Temperature Sensor 1"`
+	Type       string `json:"type" validate:"omitempty" example:"Sensor"`
+	MacAddress string `json:"mac_address" validate:"required,mac" example:"00:11:22:33:44:55"`
+	IsActive   bool   `json:"is_active" example:"true"`
+}
+
+// PatchDeviceRequest 部分更新設備請求結構
+type PatchDeviceRequest struct {
+	Name       *string `json:"name,omitempty" validate:"omitempty,min=1,max=100" example:"Temperature Sensor 1"` // 使用指針，nil 表示不更新
+	Type       *string `json:"type,omitempty" validate:"omitempty" example:"Sensor"`
+	MacAddress *string `json:"mac_address,omitempty" validate:"omitempty,mac" example:"00:11:22:33:44:55"`
+	IsActive   *bool   `json:"is_active,omitempty" example:"true"`
+}
+
+// ==========================================
+// 遙測數據相關的 Request DTOs
+// ==========================================
+
+// CreateTelemetryRequest 創建遙測數據請求結構
+type CreateTelemetryRequest struct {
+	DeviceID   uint    `json:"device_id" validate:"required,gt=0" example:"1"`
+	DataType   string  `json:"data_type" validate:"required,min=1,max=50" example:"Temperature"`
+	Value      float64 `json:"value" validate:"required" example:"25.5"`
+	RecordedAt string  `json:"recorded_at,omitempty" validate:"omitempty,datetime=2006-01-02T15:04:05Z07:00" example:"2024-01-01T00:00:00Z"` // 可選，如果沒有提供則使用當前時間
+}
+
+// PatchTelemetryRequest 部分更新遙測數據請求結構
+type PatchTelemetryRequest struct {
+	DeviceID   *uint    `json:"device_id,omitempty" validate:"omitempty,gt=0" example:"1"` // 使用指針，nil 表示不更新
+	DataType   *string  `json:"data_type,omitempty" validate:"omitempty,min=1,max=50" example:"Temperature"`
+	Value      *float64 `json:"value,omitempty" example:"25.5"`
+	RecordedAt *string  `json:"recorded_at,omitempty" validate:"omitempty,datetime=2006-01-02T15:04:05Z07:00" example:"2024-01-01T00:00:00Z"`
 }
 
 // ==========================================
