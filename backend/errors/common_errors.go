@@ -37,8 +37,8 @@ func NewNotFoundError(resource string, id interface{}) *NotFoundError {
 // ValidationError 验证错误
 type ValidationError struct {
 	*BaseError
-	Field   string
-	Reason  string
+	Field  string
+	Reason string
 }
 
 // NewValidationError 创建验证错误

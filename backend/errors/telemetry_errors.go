@@ -32,16 +32,16 @@ func NewTelemetryNotFoundError(telemetryID uint) *TelemetryNotFoundError {
 // DeviceMismatchError 设备不匹配错误
 type DeviceMismatchError struct {
 	*BaseError
-	TelemetryID uint
-	DeviceID    uint
+	TelemetryID      uint
+	DeviceID         uint
 	ExpectedDeviceID uint
 }
 
 // NewDeviceMismatchError 创建设备不匹配错误
 func NewDeviceMismatchError(telemetryID uint, deviceID, expectedDeviceID uint) *DeviceMismatchError {
 	details := map[string]interface{}{
-		"telemetry_id":      telemetryID,
-		"device_id":         deviceID,
+		"telemetry_id":       telemetryID,
+		"device_id":          deviceID,
 		"expected_device_id": expectedDeviceID,
 	}
 
@@ -100,7 +100,7 @@ type TelemetryUpdateFailedError struct {
 func NewTelemetryUpdateFailedError(telemetryID uint, reason string, err error) *TelemetryUpdateFailedError {
 	details := map[string]interface{}{
 		"telemetry_id": telemetryID,
-		"reason":      reason,
+		"reason":       reason,
 	}
 	if err != nil {
 		details["error"] = err.Error()
@@ -132,7 +132,7 @@ type TelemetryDeleteFailedError struct {
 func NewTelemetryDeleteFailedError(telemetryID uint, reason string, err error) *TelemetryDeleteFailedError {
 	details := map[string]interface{}{
 		"telemetry_id": telemetryID,
-		"reason":      reason,
+		"reason":       reason,
 	}
 	if err != nil {
 		details["error"] = err.Error()

@@ -74,7 +74,7 @@ const (
 	// 通用错误码 (000-099)
 	ErrCodeValidation      = "ERR_001"
 	ErrCodeUnauthorized    = "ERR_002"
-	ErrCodeNotFound       = "ERR_003"
+	ErrCodeNotFound        = "ERR_003"
 	ErrCodeForbidden       = "ERR_004"
 	ErrCodeConflict        = "ERR_005"
 	ErrCodeInternal        = "ERR_006"
@@ -82,24 +82,24 @@ const (
 	ErrCodeTooManyRequests = "ERR_008"
 
 	// 认证相关错误码 (100-199)
-	ErrCodeUserExists      = "ERR_101"
+	ErrCodeUserExists         = "ERR_101"
 	ErrCodeInvalidCredentials = "ERR_102"
-	ErrCodeTokenExpired    = "ERR_103"
-	ErrCodeTokenInvalid    = "ERR_104"
-	ErrCodeUserNotFound    = "ERR_105"
+	ErrCodeTokenExpired       = "ERR_103"
+	ErrCodeTokenInvalid       = "ERR_104"
+	ErrCodeUserNotFound       = "ERR_105"
 
 	// 设备相关错误码 (200-299)
-	ErrCodeDeviceNotFound  = "ERR_201"
+	ErrCodeDeviceNotFound     = "ERR_201"
 	ErrCodeDeviceCreateFailed = "ERR_202"
 	ErrCodeDeviceUpdateFailed = "ERR_203"
 	ErrCodeDeviceDeleteFailed = "ERR_204"
-	ErrCodeInvalidDeviceID = "ERR_205"
+	ErrCodeInvalidDeviceID    = "ERR_205"
 
 	// 遥测数据相关错误码 (300-399)
-	ErrCodeTelemetryNotFound = "ERR_301"
-	ErrCodeDeviceMismatch    = "ERR_302"
+	ErrCodeTelemetryNotFound     = "ERR_301"
+	ErrCodeDeviceMismatch        = "ERR_302"
 	ErrCodeTelemetryCreateFailed = "ERR_303"
 	ErrCodeTelemetryUpdateFailed = "ERR_304"
 	ErrCodeTelemetryDeleteFailed = "ERR_305"
-	ErrCodeInvalidTimeFormat = "ERR_306"
+	ErrCodeInvalidTimeFormat     = "ERR_306"
 )
