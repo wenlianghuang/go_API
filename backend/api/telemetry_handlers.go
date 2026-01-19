@@ -1,11 +1,10 @@
 package api
 
 import (
-	"fmt"
 	"net/http"
 	"strconv"
-	"strings"
 
+	"my-api/errors"
 	"my-api/service"
 
 	"github.com/go-chi/chi/v5"
@@ -46,13 +45,7 @@ func (s *Server) HandleCreateTelemetry(w http.ResponseWriter, r *http.Request) {
 		RecordedAt: req.RecordedAt,
 	})
 	if err != nil {
-		// 處理錯誤並轉換為適當的 HTTP 狀態碼
-		errMsg := err.Error()
-		if strings.Contains(errMsg, "device with ID") && strings.Contains(errMsg, "not found") {
-			WriteError(w, http.StatusNotFound, fmt.Sprintf("Device with ID %d not found", req.DeviceID))
-			return
-		}
-		WriteError(w, http.StatusInternalServerError, err.Error())
+		errors.HandleError(w, err)
 		return
 	}
 
@@ -76,7 +69,7 @@ func (s *Server) HandleCreateTelemetry(w http.ResponseWriter, r *http.Request) {
 func (s *Server) HandleListTelemetries(w http.ResponseWriter, r *http.Request) {
 	telemetries, err := s.Store.ListTelemetries(r.Context())
 	if err != nil {
-		WriteError(w, http.StatusInternalServerError, "Failed to fetch telemetries")
+		errors.HandleError(w, errors.NewInternalError("fetch telemetries", err))
 		return
 	}
 	WriteJSON(w, http.StatusOK, telemetries)
@@ -99,13 +92,13 @@ func (s *Server) HandleGetTelemetry(w http.ResponseWriter, r *http.Request) {
 	idStr := chi.URLParam(r, "id")
 	id, err := strconv.ParseUint(idStr, 10, 32)
 	if err != nil {
-		WriteError(w, http.StatusBadRequest, "Invalid telemetry ID")
+		errors.HandleError(w, errors.NewBadRequestError("Invalid telemetry ID"))
 		return
 	}
 
 	telemetry, err := s.Store.GetTelemetryByID(r.Context(), uint(id))
 	if err != nil {
-		WriteError(w, http.StatusNotFound, "Telemetry not found")
+		errors.HandleError(w, errors.NewTelemetryNotFoundError(uint(id)))
 		return
 	}
 	WriteJSON(w, http.StatusOK, telemetry)
@@ -131,7 +124,7 @@ func (s *Server) HandlePatchTelemetry(w http.ResponseWriter, r *http.Request) {
 	idStr := chi.URLParam(r, "id")
 	id, err := strconv.ParseUint(idStr, 10, 32)
 	if err != nil {
-		WriteError(w, http.StatusBadRequest, "Invalid telemetry ID")
+		errors.HandleError(w, errors.NewBadRequestError("Invalid telemetry ID"))
 		return
 	}
 
@@ -150,30 +143,7 @@ func (s *Server) HandlePatchTelemetry(w http.ResponseWriter, r *http.Request) {
 		RecordedAt: req.RecordedAt,
 	})
 	if err != nil {
-		// 處理錯誤並轉換為適當的 HTTP 狀態碼
-		errMsg := err.Error()
-		if strings.Contains(errMsg, "telemetry not found") {
-			WriteError(w, http.StatusNotFound, "Telemetry not found")
-			return
-		}
-		if strings.Contains(errMsg, "device with ID") && strings.Contains(errMsg, "not found") {
-			// 提取設備 ID
-			var deviceID uint
-			if req.DeviceID != nil {
-				deviceID = *req.DeviceID
-			}
-			WriteError(w, http.StatusNotFound, fmt.Sprintf("Device with ID %d not found", deviceID))
-			return
-		}
-		if strings.Contains(errMsg, "invalid recorded_at format") {
-			WriteError(w, http.StatusBadRequest, "Invalid recorded_at format, expected RFC3339")
-			return
-		}
-		if strings.Contains(errMsg, "at least one field must be provided") {
-			WriteError(w, http.StatusBadRequest, "At least one field must be provided for update")
-			return
-		}
-		WriteError(w, http.StatusInternalServerError, err.Error())
+		errors.HandleError(w, err)
 		return
 	}
 
@@ -202,20 +172,14 @@ func (s *Server) HandleDeleteTelemetry(w http.ResponseWriter, r *http.Request) {
 	idStr := chi.URLParam(r, "id")
 	id, err := strconv.ParseUint(idStr, 10, 32)
 	if err != nil {
-		WriteError(w, http.StatusBadRequest, "Invalid telemetry ID")
+		errors.HandleError(w, errors.NewBadRequestError("Invalid telemetry ID"))
 		return
 	}
 
 	// 2. 調用 service 執行業務邏輯
 	err = s.TelemetryService.DeleteTelemetry(r.Context(), uint(id))
 	if err != nil {
-		// 處理錯誤並轉換為適當的 HTTP 狀態碼
-		errMsg := err.Error()
-		if strings.Contains(errMsg, "telemetry not found") {
-			WriteError(w, http.StatusNotFound, "Telemetry not found")
-			return
-		}
-		WriteError(w, http.StatusInternalServerError, err.Error())
+		errors.HandleError(w, err)
 		return
 	}
 

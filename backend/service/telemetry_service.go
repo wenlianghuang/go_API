@@ -2,7 +2,7 @@ package service
 
 import (
 	"context"
-	"fmt"
+	"my-api/errors"
 	"my-api/model"
 	"my-api/store"
 	"time"
@@ -39,7 +39,7 @@ func (s *TelemetryService) CreateTelemetry(ctx context.Context, input CreateTele
 	// 驗證設備是否存在
 	_, err := s.store.GetDeviceByID(ctx, input.DeviceID)
 	if err != nil {
-		return nil, fmt.Errorf("device with ID %d not found", input.DeviceID)
+		return nil, errors.NewDeviceNotFoundError(input.DeviceID)
 	}
 
 	// 處理時間戳
@@ -64,7 +64,7 @@ func (s *TelemetryService) CreateTelemetry(ctx context.Context, input CreateTele
 
 	// 呼叫資料庫層
 	if err := s.store.AddTelemetry(ctx, telemetry); err != nil {
-		return nil, fmt.Errorf("failed to create telemetry: %w", err)
+		return nil, errors.NewTelemetryCreateFailedError("database operation failed", err)
 	}
 
 	// 構建結果
@@ -94,7 +94,7 @@ func (s *TelemetryService) PatchTelemetry(ctx context.Context, telemetryID uint,
 	// 驗證遙測數據是否存在
 	_, err := s.store.GetTelemetryByID(ctx, telemetryID)
 	if err != nil {
-		return nil, fmt.Errorf("telemetry not found")
+		return nil, errors.NewTelemetryNotFoundError(telemetryID)
 	}
 
 	// 構建更新映射（只包含提供的字段）
@@ -103,7 +103,7 @@ func (s *TelemetryService) PatchTelemetry(ctx context.Context, telemetryID uint,
 		// 驗證設備是否存在
 		_, err := s.store.GetDeviceByID(ctx, *input.DeviceID)
 		if err != nil {
-			return nil, fmt.Errorf("device with ID %d not found", *input.DeviceID)
+			return nil, errors.NewDeviceNotFoundError(*input.DeviceID)
 		}
 		updates["device_id"] = *input.DeviceID
 	}
@@ -116,25 +116,25 @@ func (s *TelemetryService) PatchTelemetry(ctx context.Context, telemetryID uint,
 	if input.RecordedAt != nil {
 		parsedTime, err := time.Parse(time.RFC3339, *input.RecordedAt)
 		if err != nil {
-			return nil, fmt.Errorf("invalid recorded_at format, expected RFC3339: %w", err)
+			return nil, errors.NewInvalidTimeFormatError(*input.RecordedAt, time.RFC3339)
 		}
 		updates["recorded_at"] = parsedTime
 	}
 
 	// 如果沒有任何更新字段
 	if len(updates) == 0 {
-		return nil, fmt.Errorf("at least one field must be provided for update")
+		return nil, errors.NewBadRequestError("at least one field must be provided for update")
 	}
 
 	// 執行部分更新
 	if err := s.store.PatchTelemetry(ctx, telemetryID, updates); err != nil {
-		return nil, fmt.Errorf("failed to update telemetry: %w", err)
+		return nil, errors.NewTelemetryUpdateFailedError(telemetryID, "database operation failed", err)
 	}
 
 	// 獲取更新後的遙測數據資訊
 	updatedTelemetry, err := s.store.GetTelemetryByID(ctx, telemetryID)
 	if err != nil {
-		return nil, fmt.Errorf("failed to fetch updated telemetry: %w", err)
+		return nil, errors.NewInternalError("fetch updated telemetry", err)
 	}
 
 	// 構建結果
@@ -150,12 +150,12 @@ func (s *TelemetryService) DeleteTelemetry(ctx context.Context, telemetryID uint
 	// 驗證遙測數據是否存在
 	_, err := s.store.GetTelemetryByID(ctx, telemetryID)
 	if err != nil {
-		return fmt.Errorf("telemetry not found")
+		return errors.NewTelemetryNotFoundError(telemetryID)
 	}
 
 	// 執行刪除
 	if err := s.store.DeleteTelemetry(ctx, telemetryID); err != nil {
-		return fmt.Errorf("failed to delete telemetry: %w", err)
+		return errors.NewTelemetryDeleteFailedError(telemetryID, "database operation failed", err)
 	}
 
 	return nil

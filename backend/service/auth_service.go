@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"fmt"
+	"my-api/errors"
 	"my-api/model"
 	"my-api/store"
 	"time"
@@ -57,13 +58,13 @@ type RegisterResult struct {
 func (s *AuthService) Register(ctx context.Context, input RegisterInput) (*RegisterResult, error) {
 	// 檢查用戶是否已存在
 	if _, err := s.Store.GetUserByEmail(ctx, input.Email); err == nil {
-		return nil, fmt.Errorf("user with this email already exists")
+		return nil, errors.NewUserExistsError(input.Email)
 	}
 
 	// 對密碼進行哈希加密
 	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(input.Password), bcrypt.DefaultCost)
 	if err != nil {
-		return nil, fmt.Errorf("failed to hash password: %w", err)
+		return nil, errors.NewInternalError("hash password", err)
 	}
 
 	// 創建用戶
@@ -77,13 +78,13 @@ func (s *AuthService) Register(ctx context.Context, input RegisterInput) (*Regis
 
 	// 保存到數據庫
 	if err := s.Store.Create(ctx, user); err != nil {
-		return nil, fmt.Errorf("failed to create user: %w", err)
+		return nil, errors.NewInternalError("create user", err)
 	}
 
 	// 生成 JWT token
 	token, err := s.JWTGenerator.GenerateJWT(user.ID, user.Username, user.Email, 5) // 5分鐘過期
 	if err != nil {
-		return nil, fmt.Errorf("failed to generate token: %w", err)
+		return nil, errors.NewInternalError("generate token", err)
 	}
 
 	// 構建結果
@@ -111,18 +112,18 @@ func (s *AuthService) Login(ctx context.Context, input LoginInput) (*LoginResult
 	// 根據 email 查找用戶
 	user, err := s.Store.GetUserByEmail(ctx, input.Email)
 	if err != nil {
-		return nil, fmt.Errorf("invalid email or password")
+		return nil, errors.NewInvalidCredentialsError()
 	}
 
 	// 驗證密碼
 	if err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(input.Password)); err != nil {
-		return nil, fmt.Errorf("invalid email or password")
+		return nil, errors.NewInvalidCredentialsError()
 	}
 
 	// 生成 JWT token
 	token, err := s.JWTGenerator.GenerateJWT(user.ID, user.Username, user.Email, 5) // 5分鐘過期
 	if err != nil {
-		return nil, fmt.Errorf("failed to generate token: %w", err)
+		return nil, errors.NewInternalError("generate token", err)
 	}
 
 	// 構建結果
@@ -149,19 +150,19 @@ func (s *AuthService) RefreshToken(ctx context.Context, input RefreshTokenInput)
 	// 刷新 token
 	newToken, err := s.JWTGenerator.RefreshJWT(input.TokenString)
 	if err != nil {
-		return nil, fmt.Errorf("invalid or expired token: %w", err)
+		return nil, errors.NewTokenInvalidError(err.Error())
 	}
 
 	// 解析新 token 以獲取用戶信息
 	claims, err := s.JWTGenerator.ValidateJWT(newToken)
 	if err != nil {
-		return nil, fmt.Errorf("failed to parse new token: %w", err)
+		return nil, errors.NewInternalError("parse new token", err)
 	}
 
 	// 從數據庫獲取用戶最新信息
 	user, err := s.Store.Get(ctx, claims.GetUserID())
 	if err != nil {
-		return nil, fmt.Errorf("failed to fetch user: %w", err)
+		return nil, errors.NewInternalError("fetch user", err)
 	}
 
 	// 構建結果

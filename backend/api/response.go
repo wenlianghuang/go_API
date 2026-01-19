@@ -5,6 +5,8 @@ import (
 	"net/http"
 )
 
+// ErrorResponse 错误响应结构（保持向后兼容）
+// 新的错误处理使用 errors.HandleError，这个结构保留用于向后兼容
 type ErrorResponse struct {
 	Error string `json:"error"`
 }
@@ -16,7 +18,8 @@ func WriteJSON(w http.ResponseWriter, status int, data any) {
 	json.NewEncoder(w).Encode(data)
 }
 
-// WriteError 負責回傳統一格式的錯誤訊息
+// WriteError 負責回傳統一格式的錯誤訊息（保留用于向后兼容）
+// 新代码应该使用 errors.HandleError
 func WriteError(w http.ResponseWriter, status int, message string) {
 	WriteJSON(w, status, ErrorResponse{Error: message})
 }
