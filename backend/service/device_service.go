@@ -2,7 +2,7 @@ package service
 
 import (
 	"context"
-	"fmt"
+	"my-api/errors"
 	"my-api/model"
 	"my-api/store"
 )
@@ -38,7 +38,7 @@ type CreateDeviceResult struct {
 func (s *DeviceService) CreateDevice(ctx context.Context, input CreateDeviceInput, defaultIsActive bool) (*CreateDeviceResult, error) {
 	// 驗證 UserID 不為空
 	if input.UserID == "" {
-		return nil, fmt.Errorf("user ID is required")
+		return nil, errors.NewBadRequestError("user ID is required")
 	}
 
 	// 轉換成 Domain Model
@@ -57,7 +57,7 @@ func (s *DeviceService) CreateDevice(ctx context.Context, input CreateDeviceInpu
 
 	// 呼叫資料庫層
 	if err := s.store.CreateDevice(ctx, device); err != nil {
-		return nil, fmt.Errorf("failed to create device: %w", err)
+		return nil, errors.NewDeviceCreateFailedError("database operation failed", err)
 	}
 
 	// 構建結果
@@ -87,7 +87,7 @@ func (s *DeviceService) PatchDevice(ctx context.Context, deviceID uint, input Pa
 	// 驗證設備是否存在
 	_, err := s.store.GetDeviceByID(ctx, deviceID)
 	if err != nil {
-		return nil, fmt.Errorf("device not found")
+		return nil, errors.NewDeviceNotFoundError(deviceID)
 	}
 
 	// 構建更新映射（只包含提供的字段）
@@ -107,18 +107,18 @@ func (s *DeviceService) PatchDevice(ctx context.Context, deviceID uint, input Pa
 
 	// 如果沒有任何更新字段
 	if len(updates) == 0 {
-		return nil, fmt.Errorf("at least one field must be provided for update")
+		return nil, errors.NewBadRequestError("at least one field must be provided for update")
 	}
 
 	// 執行部分更新
 	if err := s.store.PatchDevice(ctx, deviceID, updates); err != nil {
-		return nil, fmt.Errorf("failed to update device: %w", err)
+		return nil, errors.NewDeviceUpdateFailedError(deviceID, "database operation failed", err)
 	}
 
 	// 獲取更新後的設備資訊
 	updatedDevice, err := s.store.GetDeviceByID(ctx, deviceID)
 	if err != nil {
-		return nil, fmt.Errorf("failed to fetch updated device: %w", err)
+		return nil, errors.NewInternalError("fetch updated device", err)
 	}
 
 	// 構建結果

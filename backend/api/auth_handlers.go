@@ -3,8 +3,8 @@ package api
 import (
 	"fmt"
 	"net/http"
-	"strings"
 
+	"my-api/errors"
 	"my-api/service"
 )
 
@@ -40,12 +40,7 @@ func (s *Server) HandleRegister(w http.ResponseWriter, r *http.Request) {
 		Password: req.Password,
 	})
 	if err != nil {
-		// 處理錯誤並轉換為適當的 HTTP 狀態碼
-		if err.Error() == "user with this email already exists" {
-			WriteError(w, http.StatusConflict, "User with this email already exists")
-			return
-		}
-		WriteError(w, http.StatusInternalServerError, err.Error())
+		errors.HandleError(w, err)
 		return
 	}
 
@@ -87,12 +82,7 @@ func (s *Server) HandleLogin(w http.ResponseWriter, r *http.Request) {
 		Password: req.Password,
 	})
 	if err != nil {
-		// 處理錯誤並轉換為適當的 HTTP 狀態碼
-		if err.Error() == "invalid email or password" {
-			WriteError(w, http.StatusUnauthorized, "Invalid email or password")
-			return
-		}
-		WriteError(w, http.StatusInternalServerError, err.Error())
+		errors.HandleError(w, err)
 		return
 	}
 
@@ -122,14 +112,14 @@ func (s *Server) HandleRefreshToken(w http.ResponseWriter, r *http.Request) {
 	// 從 header 中獲取 token
 	authHeader := r.Header.Get("Authorization")
 	if authHeader == "" {
-		WriteError(w, http.StatusUnauthorized, "Missing Authorization header")
+		errors.HandleError(w, errors.NewUnauthorizedError("Missing Authorization header"))
 		return
 	}
 
 	// 解析 Bearer token
 	var tokenString string
 	if _, err := fmt.Sscanf(authHeader, "Bearer %s", &tokenString); err != nil {
-		WriteError(w, http.StatusUnauthorized, "Invalid token format")
+		errors.HandleError(w, errors.NewUnauthorizedError("Invalid token format"))
 		return
 	}
 
@@ -138,21 +128,7 @@ func (s *Server) HandleRefreshToken(w http.ResponseWriter, r *http.Request) {
 		TokenString: tokenString,
 	})
 	if err != nil {
-		// 處理錯誤並轉換為適當的 HTTP 狀態碼
-		errMsg := err.Error()
-		if strings.Contains(errMsg, "invalid or expired token") {
-			WriteError(w, http.StatusUnauthorized, "Invalid or expired token")
-			return
-		}
-		if strings.Contains(errMsg, "failed to parse new token") {
-			WriteError(w, http.StatusInternalServerError, "Failed to parse new token")
-			return
-		}
-		if strings.Contains(errMsg, "failed to fetch user") {
-			WriteError(w, http.StatusInternalServerError, "Failed to fetch user")
-			return
-		}
-		WriteError(w, http.StatusInternalServerError, err.Error())
+		errors.HandleError(w, err)
 		return
 	}
 
