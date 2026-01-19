@@ -5,32 +5,32 @@ import (
 	"net/http"
 )
 
-// ErrorResponse 错误响应结构
+// ErrorResponse 錯誤響應結構
 type ErrorResponse struct {
 	Error ErrorDetail `json:"error"`
 }
 
-// ErrorDetail 错误详情
+// ErrorDetail 錯誤詳情
 type ErrorDetail struct {
 	Code    string                 `json:"code"`
 	Message string                 `json:"message"`
 	Details map[string]interface{} `json:"details,omitempty"`
 }
 
-// HandleError 统一处理错误并写入HTTP响应
-// 如果错误是 AppError 类型，使用其状态码和错误信息
-// 否则返回 500 内部服务器错误
+// HandleError 統一處理錯誤並寫入HTTP響應
+// 如果錯誤是 AppError 類型，使用其狀態碼和錯誤資訊
+// 否則返回 500 內部伺服器錯誤
 func HandleError(w http.ResponseWriter, err error) {
 	var appErr AppError
 	var ok bool
 
-	// 尝试将错误转换为 AppError
+	// 嘗試將錯誤轉換為 AppError
 	if appErr, ok = err.(AppError); !ok {
-		// 如果不是 AppError，包装为内部错误
+		// 如果不是 AppError，包裝為內部錯誤
 		appErr = NewInternalError("unknown operation", err)
 	}
 
-	// 构建错误响应
+	// 構建錯誤響應
 	response := ErrorResponse{
 		Error: ErrorDetail{
 			Code:    appErr.Code(),
@@ -39,18 +39,18 @@ func HandleError(w http.ResponseWriter, err error) {
 		},
 	}
 
-	// 设置响应头
+	// 設置響應頭
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(appErr.StatusCode())
 
-	// 写入JSON响应
+	// 寫入JSON響應
 	json.NewEncoder(w).Encode(response)
 }
 
-// HandleValidationErrors 处理验证错误（用于 validator.ValidationErrors）
+// HandleValidationErrors 處理驗證錯誤（用於 validator.ValidationErrors）
 func HandleValidationErrors(w http.ResponseWriter, validationErrors interface{}) {
-	// 这里可以扩展以支持验证错误的特殊处理
-	// 目前使用通用的错误处理
+	// 這裡可以擴展以支援驗證錯誤的特殊處理
+	// 目前使用通用的錯誤處理
 	details := map[string]interface{}{
 		"validation_errors": validationErrors,
 	}
