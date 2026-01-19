@@ -16,7 +16,7 @@ type Device struct {
 	Type       string `gorm:"size:50"`              // e.g., "Sensor", "Camera"
 	MacAddress string `gorm:"uniqueIndex;not null"` // 唯一索引
 	IsActive   bool   `gorm:"default:true"`
-	UserID     string // Foreign key to link to a User
+	UserID     string `gorm:"column:user_id;type:varchar(255)"` // Foreign key to link to a User
 
 	// 這裡展示 GORM 的關聯：一對多 (One Device has many Telemetry data)
 	Telemetries []Telemetry `gorm:"foreignKey:DeviceID"`

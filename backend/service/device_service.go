@@ -1,6 +1,7 @@
 package service
 
 import (
+	"context"
 	"fmt"
 	"my-api/model"
 	"my-api/store"
@@ -24,6 +25,7 @@ type CreateDeviceInput struct {
 	Type       string
 	MacAddress string
 	IsActive   bool
+	UserID     string
 }
 
 // CreateDeviceResult 創建設備結果
@@ -33,13 +35,19 @@ type CreateDeviceResult struct {
 
 // CreateDevice 處理創建設備業務邏輯
 // 返回 CreateDeviceResult 和錯誤
-func (s *DeviceService) CreateDevice(input CreateDeviceInput, defaultIsActive bool) (*CreateDeviceResult, error) {
+func (s *DeviceService) CreateDevice(ctx context.Context, input CreateDeviceInput, defaultIsActive bool) (*CreateDeviceResult, error) {
+	// 驗證 UserID 不為空
+	if input.UserID == "" {
+		return nil, fmt.Errorf("user ID is required")
+	}
+
 	// 轉換成 Domain Model
 	device := &model.Device{
 		Name:       input.Name,
 		Type:       input.Type,
 		MacAddress: input.MacAddress,
 		IsActive:   input.IsActive,
+		UserID:     input.UserID,
 	}
 
 	// 如果沒有指定 IsActive，使用預設值
@@ -48,7 +56,7 @@ func (s *DeviceService) CreateDevice(input CreateDeviceInput, defaultIsActive bo
 	}
 
 	// 呼叫資料庫層
-	if err := s.store.CreateDevice(device); err != nil {
+	if err := s.store.CreateDevice(ctx, device); err != nil {
 		return nil, fmt.Errorf("failed to create device: %w", err)
 	}
 
@@ -75,9 +83,9 @@ type PatchDeviceResult struct {
 
 // PatchDevice 處理部分更新設備業務邏輯
 // 返回 PatchDeviceResult 和錯誤
-func (s *DeviceService) PatchDevice(deviceID uint, input PatchDeviceInput) (*PatchDeviceResult, error) {
+func (s *DeviceService) PatchDevice(ctx context.Context, deviceID uint, input PatchDeviceInput) (*PatchDeviceResult, error) {
 	// 驗證設備是否存在
-	_, err := s.store.GetDeviceByID(deviceID)
+	_, err := s.store.GetDeviceByID(ctx, deviceID)
 	if err != nil {
 		return nil, fmt.Errorf("device not found")
 	}
@@ -103,12 +111,12 @@ func (s *DeviceService) PatchDevice(deviceID uint, input PatchDeviceInput) (*Pat
 	}
 
 	// 執行部分更新
-	if err := s.store.PatchDevice(deviceID, updates); err != nil {
+	if err := s.store.PatchDevice(ctx, deviceID, updates); err != nil {
 		return nil, fmt.Errorf("failed to update device: %w", err)
 	}
 
 	// 獲取更新後的設備資訊
-	updatedDevice, err := s.store.GetDeviceByID(deviceID)
+	updatedDevice, err := s.store.GetDeviceByID(ctx, deviceID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch updated device: %w", err)
 	}

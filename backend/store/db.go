@@ -1,6 +1,7 @@
 package store
 
 import (
+	"context"
 	"fmt"
 	"my-api/model"
 	"reflect"
@@ -10,32 +11,32 @@ import (
 // Storage 定義了資料庫的行為 (Interface)，這是為了以後可以隨時換成 Postgres/MySQL
 type Storage interface {
 	// User 相關
-	Create(u model.User) error
-	Get(id string) (model.User, error)
-	GetUserByEmail(email string) (model.User, error)
-	List() ([]model.User, error)
+	Create(ctx context.Context, u model.User) error
+	Get(ctx context.Context, id string) (model.User, error)
+	GetUserByEmail(ctx context.Context, email string) (model.User, error)
+	List(ctx context.Context) ([]model.User, error)
 
 	// 設備相關
-	CreateDevice(dev *model.Device) error
-	GetDeviceByID(id uint) (*model.Device, error)
-	ListDevices() ([]model.Device, error)
+	CreateDevice(ctx context.Context, dev *model.Device) error
+	GetDeviceByID(ctx context.Context, id uint) (*model.Device, error)
+	ListDevices(ctx context.Context) ([]model.Device, error)
 
 	// 定義刪除功能的合約
 	// 這樣 Server 才知道可以呼叫這個方法
-	DeleteDeviceWithAllData(id uint) error
+	DeleteDeviceWithAllData(ctx context.Context, id uint) error
 	// 更新整個設備（所有字段）- PUT 使用
-	UpdateDevice(id uint, device *model.Device) error
+	UpdateDevice(ctx context.Context, id uint, device *model.Device) error
 	// 部分更新設備（只更新提供的字段）- PATCH 使用
-	PatchDevice(id uint, updates map[string]interface{}) error
+	PatchDevice(ctx context.Context, id uint, updates map[string]interface{}) error
 	// 數據相關
-	ListTelemetries() ([]model.Telemetry, error)
-	AddTelemetry(data *model.Telemetry) error
-	GetTelemetryByID(id uint) (*model.Telemetry, error)
+	ListTelemetries(ctx context.Context) ([]model.Telemetry, error)
+	AddTelemetry(ctx context.Context, data *model.Telemetry) error
+	GetTelemetryByID(ctx context.Context, id uint) (*model.Telemetry, error)
 	// 部分更新遙測數據（只更新提供的字段）- PATCH 使用
-	PatchTelemetry(id uint, updates map[string]interface{}) error
+	PatchTelemetry(ctx context.Context, id uint, updates map[string]interface{}) error
 
 	// 刪除遙測數據
-	DeleteTelemetry(id uint) error
+	DeleteTelemetry(ctx context.Context, id uint) error
 }
 
 // MemoryStore 是 Storage 的一個實作 (存在記憶體中)
@@ -58,7 +59,7 @@ func NewMemoryStore() *MemoryStore {
 	}
 }
 
-func (s *MemoryStore) Create(u model.User) error {
+func (s *MemoryStore) Create(ctx context.Context, u model.User) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -69,7 +70,7 @@ func (s *MemoryStore) Create(u model.User) error {
 	return nil
 }
 
-func (s *MemoryStore) Get(id string) (model.User, error) {
+func (s *MemoryStore) Get(ctx context.Context, id string) (model.User, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -80,7 +81,7 @@ func (s *MemoryStore) Get(id string) (model.User, error) {
 	return user, nil
 }
 
-func (s *MemoryStore) List() ([]model.User, error) {
+func (s *MemoryStore) List(ctx context.Context) ([]model.User, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -91,7 +92,7 @@ func (s *MemoryStore) List() ([]model.User, error) {
 	return users, nil
 }
 
-func (s *MemoryStore) GetUserByEmail(email string) (model.User, error) {
+func (s *MemoryStore) GetUserByEmail(ctx context.Context, email string) (model.User, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -103,7 +104,7 @@ func (s *MemoryStore) GetUserByEmail(email string) (model.User, error) {
 	return model.User{}, fmt.Errorf("user not found")
 }
 
-func (s *MemoryStore) ListTelemetries() ([]model.Telemetry, error) {
+func (s *MemoryStore) ListTelemetries(ctx context.Context) ([]model.Telemetry, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -114,7 +115,7 @@ func (s *MemoryStore) ListTelemetries() ([]model.Telemetry, error) {
 	return telemetries, nil
 }
 
-func (s *MemoryStore) CreateDevice(dev *model.Device) error {
+func (s *MemoryStore) CreateDevice(ctx context.Context, dev *model.Device) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	dev.ID = s.nextDeviceID
@@ -123,7 +124,7 @@ func (s *MemoryStore) CreateDevice(dev *model.Device) error {
 	return nil
 }
 
-func (s *MemoryStore) GetDeviceByID(id uint) (*model.Device, error) {
+func (s *MemoryStore) GetDeviceByID(ctx context.Context, id uint) (*model.Device, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	dev, ok := s.devices[id]
@@ -133,7 +134,7 @@ func (s *MemoryStore) GetDeviceByID(id uint) (*model.Device, error) {
 	return dev, nil
 }
 
-func (s *MemoryStore) ListDevices() ([]model.Device, error) {
+func (s *MemoryStore) ListDevices(ctx context.Context) ([]model.Device, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	var devices []model.Device
@@ -143,7 +144,7 @@ func (s *MemoryStore) ListDevices() ([]model.Device, error) {
 	return devices, nil
 }
 
-func (s *MemoryStore) DeleteDeviceWithAllData(id uint) error {
+func (s *MemoryStore) DeleteDeviceWithAllData(ctx context.Context, id uint) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if _, ok := s.devices[id]; !ok {
@@ -159,7 +160,7 @@ func (s *MemoryStore) DeleteDeviceWithAllData(id uint) error {
 	return nil
 }
 
-func (s *MemoryStore) UpdateDevice(id uint, device *model.Device) error {
+func (s *MemoryStore) UpdateDevice(ctx context.Context, id uint, device *model.Device) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if _, ok := s.devices[id]; !ok {
@@ -170,7 +171,7 @@ func (s *MemoryStore) UpdateDevice(id uint, device *model.Device) error {
 	return nil
 }
 
-func (s *MemoryStore) PatchDevice(id uint, updates map[string]interface{}) error {
+func (s *MemoryStore) PatchDevice(ctx context.Context, id uint, updates map[string]interface{}) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	dev, ok := s.devices[id]
@@ -192,7 +193,7 @@ func (s *MemoryStore) PatchDevice(id uint, updates map[string]interface{}) error
 	return nil
 }
 
-func (s *MemoryStore) AddTelemetry(data *model.Telemetry) error {
+func (s *MemoryStore) AddTelemetry(ctx context.Context, data *model.Telemetry) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	data.ID = s.nextTelemetryID
@@ -201,7 +202,7 @@ func (s *MemoryStore) AddTelemetry(data *model.Telemetry) error {
 	return nil
 }
 
-func (s *MemoryStore) GetTelemetryByID(id uint) (*model.Telemetry, error) {
+func (s *MemoryStore) GetTelemetryByID(ctx context.Context, id uint) (*model.Telemetry, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	tel, ok := s.telemetries[id]
@@ -211,7 +212,7 @@ func (s *MemoryStore) GetTelemetryByID(id uint) (*model.Telemetry, error) {
 	return tel, nil
 }
 
-func (s *MemoryStore) PatchTelemetry(id uint, updates map[string]interface{}) error {
+func (s *MemoryStore) PatchTelemetry(ctx context.Context, id uint, updates map[string]interface{}) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	tel, ok := s.telemetries[id]
@@ -232,7 +233,7 @@ func (s *MemoryStore) PatchTelemetry(id uint, updates map[string]interface{}) er
 	return nil
 }
 
-func (s *MemoryStore) DeleteTelemetry(id uint) error {
+func (s *MemoryStore) DeleteTelemetry(ctx context.Context, id uint) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if _, ok := s.telemetries[id]; !ok {

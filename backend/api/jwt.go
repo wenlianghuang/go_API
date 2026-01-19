@@ -2,23 +2,12 @@ package api
 
 import (
 	"errors"
+	"my-api/config"
 	"my-api/service"
-	"os"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
 )
-
-// JWTSecret 用於簽署 JWT 的密鑰
-var JWTSecret = getJWTSecret()
-
-func getJWTSecret() string {
-	secret := os.Getenv("JWT_SECRET")
-	if secret == "" {
-		panic("JWT_SECRET is not set")
-	}
-	return secret
-}
 
 // Claims 定義 JWT 的 payload 結構
 type Claims struct {
@@ -29,26 +18,30 @@ type Claims struct {
 }
 
 // JWTService 實現 service.JWTGenerator 接口
-type JWTService struct{}
+type JWTService struct {
+	secret string
+}
 
 // NewJWTService 創建一個新的 JWTService 實例
-func NewJWTService() *JWTService {
-	return &JWTService{}
+func NewJWTService(cfg *config.Config) *JWTService {
+	return &JWTService{
+		secret: cfg.App.JWTSecret,
+	}
 }
 
 // GenerateJWT 實現 service.JWTGenerator 接口
 func (j *JWTService) GenerateJWT(userID, username, email string, expirationHours int) (string, error) {
-	return GenerateJWT(userID, username, email, expirationHours)
+	return GenerateJWT(j.secret, userID, username, email, expirationHours)
 }
 
 // RefreshJWT 實現 service.JWTGenerator 接口
 func (j *JWTService) RefreshJWT(oldTokenString string) (string, error) {
-	return RefreshJWT(oldTokenString)
+	return RefreshJWT(j.secret, oldTokenString)
 }
 
 // ValidateJWT 實現 service.JWTGenerator 接口
 func (j *JWTService) ValidateJWT(tokenString string) (service.JWTClaims, error) {
-	claims, err := ValidateJWT(tokenString)
+	claims, err := ValidateJWT(j.secret, tokenString)
 	if err != nil {
 		return nil, err
 	}
@@ -74,13 +67,14 @@ func (c *ClaimsAdapter) GetEmail() string {
 
 // GenerateJWT 生成一個新的 JWT token
 // 參數：
+//   - secret: JWT 密鑰
 //   - userID: 用戶 ID
 //   - username: 用戶名
 //   - email: 用戶郵箱
 //   - expirationHours: token 過期時間（小時）
 //
 // 返回：JWT token 字符串
-func GenerateJWT(userID, username, email string, expirationHours int) (string, error) {
+func GenerateJWT(secret string, userID, username, email string, expirationHours int) (string, error) {
 	// 設定過期時間
 	expirationTime := time.Now().Add(time.Duration(expirationHours) * time.Minute)
 
@@ -103,7 +97,7 @@ func GenerateJWT(userID, username, email string, expirationHours int) (string, e
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 
 	// 簽署 token
-	tokenString, err := token.SignedString([]byte(JWTSecret))
+	tokenString, err := token.SignedString([]byte(secret))
 	if err != nil {
 		return "", err
 	}
@@ -112,16 +106,16 @@ func GenerateJWT(userID, username, email string, expirationHours int) (string, e
 }
 
 // ValidateJWT 驗證並解析 JWT token
-// 參數：tokenString - JWT token 字符串
+// 參數：secret - JWT 密鑰, tokenString - JWT token 字符串
 // 返回：Claims 和錯誤
-func ValidateJWT(tokenString string) (*Claims, error) {
+func ValidateJWT(secret, tokenString string) (*Claims, error) {
 	// 解析 token
 	token, err := jwt.ParseWithClaims(tokenString, &Claims{}, func(token *jwt.Token) (interface{}, error) {
 		// 驗證簽名算法是否正確
 		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
 			return nil, errors.New("unexpected signing method")
 		}
-		return []byte(JWTSecret), nil
+		return []byte(secret), nil
 	})
 
 	if err != nil {
@@ -137,17 +131,17 @@ func ValidateJWT(tokenString string) (*Claims, error) {
 }
 
 // RefreshJWT 刷新 JWT token（生成新的 token）
-// 參數：oldTokenString - 舊的 JWT token
+// 參數：secret - JWT 密鑰, oldTokenString - 舊的 JWT token
 // 返回：新的 JWT token
-func RefreshJWT(oldTokenString string) (string, error) {
+func RefreshJWT(secret, oldTokenString string) (string, error) {
 	// 首先驗證舊 token
-	claims, err := ValidateJWT(oldTokenString)
+	claims, err := ValidateJWT(secret, oldTokenString)
 	if err != nil {
 		return "", err
 	}
 
 	// 生成新的 token（延長過期時間）
-	return GenerateJWT(claims.UserID, claims.Username, claims.Email, 5)
+	return GenerateJWT(secret, claims.UserID, claims.Username, claims.Email, 5)
 }
 
 // generateTokenID 生成一個唯一的 token ID

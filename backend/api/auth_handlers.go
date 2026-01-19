@@ -34,7 +34,7 @@ func (s *Server) HandleRegister(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// 調用 service 執行業務邏輯
-	result, err := s.AuthService.Register(service.RegisterInput{
+	result, err := s.AuthService.Register(r.Context(), service.RegisterInput{
 		Username: req.Username,
 		Email:    req.Email,
 		Password: req.Password,
@@ -82,7 +82,7 @@ func (s *Server) HandleLogin(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// 調用 service 執行業務邏輯
-	result, err := s.AuthService.Login(service.LoginInput{
+	result, err := s.AuthService.Login(r.Context(), service.LoginInput{
 		Email:    req.Email,
 		Password: req.Password,
 	})
@@ -134,7 +134,7 @@ func (s *Server) HandleRefreshToken(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// 調用 service 執行業務邏輯
-	result, err := s.AuthService.RefreshToken(service.RefreshTokenInput{
+	result, err := s.AuthService.RefreshToken(r.Context(), service.RefreshTokenInput{
 		TokenString: tokenString,
 	})
 	if err != nil {

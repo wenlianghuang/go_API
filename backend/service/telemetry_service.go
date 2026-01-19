@@ -1,6 +1,7 @@
 package service
 
 import (
+	"context"
 	"fmt"
 	"my-api/model"
 	"my-api/store"
@@ -34,9 +35,9 @@ type CreateTelemetryResult struct {
 
 // CreateTelemetry 處理創建遙測數據業務邏輯
 // 返回 CreateTelemetryResult 和錯誤
-func (s *TelemetryService) CreateTelemetry(input CreateTelemetryInput) (*CreateTelemetryResult, error) {
+func (s *TelemetryService) CreateTelemetry(ctx context.Context, input CreateTelemetryInput) (*CreateTelemetryResult, error) {
 	// 驗證設備是否存在
-	_, err := s.store.GetDeviceByID(input.DeviceID)
+	_, err := s.store.GetDeviceByID(ctx, input.DeviceID)
 	if err != nil {
 		return nil, fmt.Errorf("device with ID %d not found", input.DeviceID)
 	}
@@ -62,7 +63,7 @@ func (s *TelemetryService) CreateTelemetry(input CreateTelemetryInput) (*CreateT
 	}
 
 	// 呼叫資料庫層
-	if err := s.store.AddTelemetry(telemetry); err != nil {
+	if err := s.store.AddTelemetry(ctx, telemetry); err != nil {
 		return nil, fmt.Errorf("failed to create telemetry: %w", err)
 	}
 
@@ -89,9 +90,9 @@ type PatchTelemetryResult struct {
 
 // PatchTelemetry 處理部分更新遙測數據業務邏輯
 // 返回 PatchTelemetryResult 和錯誤
-func (s *TelemetryService) PatchTelemetry(telemetryID uint, input PatchTelemetryInput) (*PatchTelemetryResult, error) {
+func (s *TelemetryService) PatchTelemetry(ctx context.Context, telemetryID uint, input PatchTelemetryInput) (*PatchTelemetryResult, error) {
 	// 驗證遙測數據是否存在
-	_, err := s.store.GetTelemetryByID(telemetryID)
+	_, err := s.store.GetTelemetryByID(ctx, telemetryID)
 	if err != nil {
 		return nil, fmt.Errorf("telemetry not found")
 	}
@@ -100,7 +101,7 @@ func (s *TelemetryService) PatchTelemetry(telemetryID uint, input PatchTelemetry
 	updates := make(map[string]interface{})
 	if input.DeviceID != nil {
 		// 驗證設備是否存在
-		_, err := s.store.GetDeviceByID(*input.DeviceID)
+		_, err := s.store.GetDeviceByID(ctx, *input.DeviceID)
 		if err != nil {
 			return nil, fmt.Errorf("device with ID %d not found", *input.DeviceID)
 		}
@@ -126,12 +127,12 @@ func (s *TelemetryService) PatchTelemetry(telemetryID uint, input PatchTelemetry
 	}
 
 	// 執行部分更新
-	if err := s.store.PatchTelemetry(telemetryID, updates); err != nil {
+	if err := s.store.PatchTelemetry(ctx, telemetryID, updates); err != nil {
 		return nil, fmt.Errorf("failed to update telemetry: %w", err)
 	}
 
 	// 獲取更新後的遙測數據資訊
-	updatedTelemetry, err := s.store.GetTelemetryByID(telemetryID)
+	updatedTelemetry, err := s.store.GetTelemetryByID(ctx, telemetryID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch updated telemetry: %w", err)
 	}
@@ -145,15 +146,15 @@ func (s *TelemetryService) PatchTelemetry(telemetryID uint, input PatchTelemetry
 }
 
 // DeleteTelemetry 處理刪除遙測數據業務邏輯
-func (s *TelemetryService) DeleteTelemetry(telemetryID uint) error {
+func (s *TelemetryService) DeleteTelemetry(ctx context.Context, telemetryID uint) error {
 	// 驗證遙測數據是否存在
-	_, err := s.store.GetTelemetryByID(telemetryID)
+	_, err := s.store.GetTelemetryByID(ctx, telemetryID)
 	if err != nil {
 		return fmt.Errorf("telemetry not found")
 	}
 
 	// 執行刪除
-	if err := s.store.DeleteTelemetry(telemetryID); err != nil {
+	if err := s.store.DeleteTelemetry(ctx, telemetryID); err != nil {
 		return fmt.Errorf("failed to delete telemetry: %w", err)
 	}
 

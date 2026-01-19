@@ -12,9 +12,7 @@ import (
 // TestGenerateJWT tests JWT token generation with various inputs
 func TestGenerateJWT(t *testing.T) {
 	// Setup: use a test secret
-	oldSecret := JWTSecret
-	JWTSecret = "test-secret-key"
-	defer func() { JWTSecret = oldSecret }()
+	testSecret := "test-secret-key"
 
 	tests := []struct {
 		name            string
@@ -65,7 +63,7 @@ func TestGenerateJWT(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			token, err := GenerateJWT(tt.userID, tt.username, tt.email, tt.expirationHours)
+			token, err := GenerateJWT(testSecret, tt.userID, tt.username, tt.email, tt.expirationHours)
 
 			// 使用 testify 断言
 			if tt.wantErr {
@@ -78,7 +76,7 @@ func TestGenerateJWT(t *testing.T) {
 				assert.NotEmpty(t, token, "Token should not be empty")
 
 				// Verify the token can be validated
-				claims, err := ValidateJWT(token)
+				claims, err := ValidateJWT(testSecret, token)
 				require.NoError(t, err, "Should be able to validate generated token")
 				require.NotNil(t, claims, "Claims should not be nil")
 
@@ -94,22 +92,19 @@ func TestGenerateJWT(t *testing.T) {
 // TestValidateJWT tests JWT token validation with various scenarios
 func TestValidateJWT(t *testing.T) {
 	// Setup: use a test secret
-	oldSecret := JWTSecret
-	JWTSecret = "test-secret-key"
-	defer func() { JWTSecret = oldSecret }()
+	testSecret := "test-secret-key"
+	differentSecret := "different-secret"
 
 	// Generate valid tokens for testing - 使用 require 确保测试数据生成成功
-	validToken, err := GenerateJWT("user123", "testuser", "test@example.com", 24)
+	validToken, err := GenerateJWT(testSecret, "user123", "testuser", "test@example.com", 24)
 	require.NoError(t, err)
 
-	expiredToken, err := GenerateJWT("user456", "expired", "expired@example.com", -1)
+	expiredToken, err := GenerateJWT(testSecret, "user456", "expired", "expired@example.com", -1)
 	require.NoError(t, err)
 
 	// Generate token with different secret
-	JWTSecret = "different-secret"
-	tokenWithDifferentSecret, err := GenerateJWT("user789", "diffuser", "diff@example.com", 24)
+	tokenWithDifferentSecret, err := GenerateJWT(differentSecret, "user789", "diffuser", "diff@example.com", 24)
 	require.NoError(t, err)
-	JWTSecret = "test-secret-key" // Restore
 
 	tests := []struct {
 		name          string
@@ -158,7 +153,7 @@ func TestValidateJWT(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			claims, err := ValidateJWT(tt.token)
+			claims, err := ValidateJWT(testSecret, tt.token)
 
 			if tt.wantErr {
 				assert.Error(t, err, "Should return error for invalid token")
@@ -181,9 +176,8 @@ func TestValidateJWT(t *testing.T) {
 // TestRefreshJWT tests JWT token refresh functionality
 func TestRefreshJWT(t *testing.T) {
 	// Setup: use a test secret
-	oldSecret := JWTSecret
-	JWTSecret = "test-secret-key"
-	defer func() { JWTSecret = oldSecret }()
+	testSecret := "test-secret-key"
+	differentSecret := "different-secret"
 
 	tests := []struct {
 		name          string
@@ -194,7 +188,7 @@ func TestRefreshJWT(t *testing.T) {
 		{
 			name: "Refresh valid token",
 			setupToken: func() string {
-				token, _ := GenerateJWT("user123", "testuser", "test@example.com", 24)
+				token, _ := GenerateJWT(testSecret, "user123", "testuser", "test@example.com", 24)
 				return token
 			},
 			wantErr: false,
@@ -202,7 +196,7 @@ func TestRefreshJWT(t *testing.T) {
 		{
 			name: "Refresh expired token",
 			setupToken: func() string {
-				token, _ := GenerateJWT("user456", "expired", "expired@example.com", -1)
+				token, _ := GenerateJWT(testSecret, "user456", "expired", "expired@example.com", -1)
 				return token
 			},
 			wantErr:       true,
@@ -219,10 +213,7 @@ func TestRefreshJWT(t *testing.T) {
 		{
 			name: "Refresh token with invalid signature",
 			setupToken: func() string {
-				oldSecret := JWTSecret
-				JWTSecret = "different-secret"
-				token, _ := GenerateJWT("user789", "diffuser", "diff@example.com", 24)
-				JWTSecret = oldSecret
+				token, _ := GenerateJWT(differentSecret, "user789", "diffuser", "diff@example.com", 24)
 				return token
 			},
 			wantErr:       true,
@@ -239,7 +230,7 @@ func TestRefreshJWT(t *testing.T) {
 				time.Sleep(10 * time.Millisecond)
 			}
 
-			newToken, err := RefreshJWT(oldToken)
+			newToken, err := RefreshJWT(testSecret, oldToken)
 
 			if tt.wantErr {
 				assert.Error(t, err, "Should return error for invalid token refresh")
@@ -257,12 +248,12 @@ func TestRefreshJWT(t *testing.T) {
 			assert.NotEqual(t, oldToken, newToken, "Refreshed token should be different from original")
 
 			// Validate the new token
-			newClaims, err := ValidateJWT(newToken)
+			newClaims, err := ValidateJWT(testSecret, newToken)
 			require.NoError(t, err, "Refreshed token should be valid")
 			require.NotNil(t, newClaims)
 
 			// Verify original claims are preserved
-			oldClaims, _ := ValidateJWT(oldToken)
+			oldClaims, _ := ValidateJWT(testSecret, oldToken)
 			assert.Equal(t, oldClaims.UserID, newClaims.UserID, "UserID should be preserved")
 			assert.Equal(t, oldClaims.Username, newClaims.Username, "Username should be preserved")
 			assert.Equal(t, oldClaims.Email, newClaims.Email, "Email should be preserved")
@@ -272,9 +263,7 @@ func TestRefreshJWT(t *testing.T) {
 
 // TestJWTExpirationTime tests that tokens expire at the correct time
 func TestJWTExpirationTime(t *testing.T) {
-	oldSecret := JWTSecret
-	JWTSecret = "test-secret-key"
-	defer func() { JWTSecret = oldSecret }()
+	testSecret := "test-secret-key"
 
 	tests := []struct {
 		name            string
@@ -298,7 +287,7 @@ func TestJWTExpirationTime(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			token, err := GenerateJWT("user123", "testuser", "test@example.com", tt.expirationHours)
+			token, err := GenerateJWT(testSecret, "user123", "testuser", "test@example.com", tt.expirationHours)
 			require.NoError(t, err)
 
 			// Wait if needed
@@ -306,7 +295,7 @@ func TestJWTExpirationTime(t *testing.T) {
 				time.Sleep(tt.checkAfter)
 			}
 
-			_, err = ValidateJWT(token)
+			_, err = ValidateJWT(testSecret, token)
 
 			if tt.shouldBeValid {
 				assert.NoError(t, err, "Token should still be valid")
@@ -319,9 +308,7 @@ func TestJWTExpirationTime(t *testing.T) {
 
 // TestJWTClaimsContent tests that JWT claims contain correct information
 func TestJWTClaimsContent(t *testing.T) {
-	oldSecret := JWTSecret
-	JWTSecret = "test-secret-key"
-	defer func() { JWTSecret = oldSecret }()
+	testSecret := "test-secret-key"
 
 	tests := []struct {
 		name     string
@@ -351,10 +338,10 @@ func TestJWTClaimsContent(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			token, err := GenerateJWT(tt.userID, tt.username, tt.email, 24)
+			token, err := GenerateJWT(testSecret, tt.userID, tt.username, tt.email, 24)
 			require.NoError(t, err)
 
-			claims, err := ValidateJWT(token)
+			claims, err := ValidateJWT(testSecret, token)
 			require.NoError(t, err)
 			require.NotNil(t, claims)
 
@@ -379,26 +366,21 @@ func TestJWTClaimsContent(t *testing.T) {
 
 // BenchmarkGenerateJWT benchmarks JWT generation performance
 func BenchmarkGenerateJWT(b *testing.B) {
-	oldSecret := JWTSecret
-	JWTSecret = "test-secret-key"
-	defer func() { JWTSecret = oldSecret }()
+	testSecret := "test-secret-key"
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_, _ = GenerateJWT("user123", "testuser", "test@example.com", 24)
+		_, _ = GenerateJWT(testSecret, "user123", "testuser", "test@example.com", 24)
 	}
 }
 
 // BenchmarkValidateJWT benchmarks JWT validation performance
 func BenchmarkValidateJWT(b *testing.B) {
-	oldSecret := JWTSecret
-	JWTSecret = "test-secret-key"
-	defer func() { JWTSecret = oldSecret }()
-
-	token, _ := GenerateJWT("user123", "testuser", "test@example.com", 24)
+	testSecret := "test-secret-key"
+	token, _ := GenerateJWT(testSecret, "user123", "testuser", "test@example.com", 24)
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_, _ = ValidateJWT(token)
+		_, _ = ValidateJWT(testSecret, token)
 	}
 }

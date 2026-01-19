@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"fmt"
+	"my-api/config"
 	"my-api/service"
 	"my-api/store"
 	"net/http"
@@ -24,6 +25,7 @@ type Server struct {
 	TelemetryService *service.TelemetryService // 遙測數據服務
 	TaskChan         chan uint                 // 存放設備 ID 的任務通道
 	Hub              *Hub                      // 存放 WebSocket 的 Hub
+	Config           *config.Config            // 配置
 
 	// 🆕 優雅停機支援
 	workerWg     sync.WaitGroup     // 用於等待 worker goroutine 完成
@@ -32,10 +34,10 @@ type Server struct {
 }
 
 // NewServer 初始化 Server 並掛載路由
-func NewServer(store store.Storage, redisAddr string) *Server {
+func NewServer(store store.Storage, cfg *config.Config) *Server {
 	// 1. 初始化 Redis
 	rdb := redis.NewClient(&redis.Options{
-		Addr: redisAddr, // 使用傳入的 Redis 位址
+		Addr: cfg.Redis.Addr, // 使用配置中的 Redis 位址
 	})
 
 	// 🆕 創建可取消的 context，用於控制 worker 停機
@@ -44,11 +46,12 @@ func NewServer(store store.Storage, redisAddr string) *Server {
 	s := &Server{
 		Router:           chi.NewRouter(),
 		Store:            store,
-		AuthService:      service.NewAuthService(store, NewJWTService()),
+		AuthService:      service.NewAuthService(store, NewJWTService(cfg)),
 		DeviceService:    service.NewDeviceService(store),
 		TelemetryService: service.NewTelemetryService(store),
 		TaskChan:         make(chan uint, 100), // 設定通道大小為 100
 		Hub:              NewHub(rdb),
+		Config:           cfg,
 		workerCtx:        ctx,    // 🆕 儲存 context
 		workerCancel:     cancel, // 🆕 儲存 cancel 函數
 	}
