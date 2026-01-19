@@ -37,16 +37,24 @@ func (s *Server) HandleCreateDevice(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// 從 context 中獲取當前登入用戶的 ID（由 AuthMiddleware 注入）
+	userID, ok := GetUserIDFromContext(r.Context())
+	if !ok {
+		WriteError(w, http.StatusUnauthorized, "User ID not found in context")
+		return
+	}
+
 	// 判斷是否應該使用預設的 IsActive 值
 	// 如果 URL query 參數中沒有 "is_active" 且請求體中的 IsActive 是 false，則使用預設值 true
 	defaultIsActive := !r.URL.Query().Has("is_active") && !req.IsActive
 
 	// 調用 service 執行業務邏輯
-	result, err := s.DeviceService.CreateDevice(service.CreateDeviceInput{
+	result, err := s.DeviceService.CreateDevice(r.Context(), service.CreateDeviceInput{
 		Name:       req.Name,
 		Type:       req.Type,
 		MacAddress: req.MacAddress,
 		IsActive:   req.IsActive,
+		UserID:     userID,
 	}, defaultIsActive)
 	if err != nil {
 		WriteError(w, http.StatusInternalServerError, err.Error())
@@ -69,7 +77,7 @@ func (s *Server) HandleCreateDevice(w http.ResponseWriter, r *http.Request) {
 // @Failure      500  {object}  ErrorResponse
 // @Router       /devices [get]
 func (s *Server) HandleListDevices(w http.ResponseWriter, r *http.Request) {
-	devices, err := s.Store.ListDevices()
+	devices, err := s.Store.ListDevices(r.Context())
 	if err != nil {
 		WriteError(w, http.StatusInternalServerError, "Failed to fetch devices")
 		return
@@ -99,7 +107,7 @@ func (s *Server) HandleGetDevice(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	device, err := s.Store.GetDeviceByID(uint(id))
+	device, err := s.Store.GetDeviceByID(r.Context(), uint(id))
 	if err != nil {
 		WriteError(w, http.StatusNotFound, "Device not found")
 		return
@@ -142,7 +150,7 @@ func (s *Server) HandleUpdateDevice(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// 4. 驗證設備是否存在
-	_, err = s.Store.GetDeviceByID(uint(id))
+	_, err = s.Store.GetDeviceByID(r.Context(), uint(id))
 	if err != nil {
 		WriteError(w, http.StatusNotFound, "Device not found")
 		return
@@ -157,13 +165,13 @@ func (s *Server) HandleUpdateDevice(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// 6. 更新設備
-	if err := s.Store.UpdateDevice(uint(id), device); err != nil {
+	if err := s.Store.UpdateDevice(r.Context(), uint(id), device); err != nil {
 		WriteError(w, http.StatusInternalServerError, "Failed to update device: "+err.Error())
 		return
 	}
 
 	// 7. 回傳更新後的設備資訊
-	updatedDevice, err := s.Store.GetDeviceByID(uint(id))
+	updatedDevice, err := s.Store.GetDeviceByID(r.Context(), uint(id))
 	if err != nil {
 		WriteError(w, http.StatusInternalServerError, "Failed to fetch updated device")
 		return
@@ -205,7 +213,7 @@ func (s *Server) HandlePatchDevice(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// 3. 調用 service 執行業務邏輯
-	result, err := s.DeviceService.PatchDevice(uint(id), service.PatchDeviceInput{
+	result, err := s.DeviceService.PatchDevice(r.Context(), uint(id), service.PatchDeviceInput{
 		Name:       req.Name,
 		Type:       req.Type,
 		MacAddress: req.MacAddress,
@@ -255,7 +263,7 @@ func (s *Server) HandleDeleteDevice(w http.ResponseWriter, r *http.Request) {
 
 	// 2. 呼叫 Store 執行原子性刪除
 	// 因為我们在介面 (store/db.go) 定義了，所以這裡可以呼叫 s.Store.DeleteDeviceWithAllData
-	if err := s.Store.DeleteDeviceWithAllData(uint(id)); err != nil {
+	if err := s.Store.DeleteDeviceWithAllData(r.Context(), uint(id)); err != nil {
 		WriteError(w, http.StatusInternalServerError, "Failed to delete device: "+err.Error())
 		return
 	}

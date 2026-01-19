@@ -44,7 +44,7 @@ func (s *Server) HandleCreateUser(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// 呼叫資料庫層
-	if err := s.Store.Create(user); err != nil {
+	if err := s.Store.Create(r.Context(), user); err != nil {
 		WriteError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
@@ -64,7 +64,7 @@ func (s *Server) HandleCreateUser(w http.ResponseWriter, r *http.Request) {
 // @Failure      500  {object}  ErrorResponse
 // @Router       /users [get]
 func (s *Server) HandleListUsers(w http.ResponseWriter, r *http.Request) {
-	users, err := s.Store.List()
+	users, err := s.Store.List(r.Context())
 	if err != nil {
 		WriteError(w, http.StatusInternalServerError, "Failed to fetch users")
 		return
@@ -88,7 +88,7 @@ func (s *Server) HandleGetUser(w http.ResponseWriter, r *http.Request) {
 	// 從 URL 參數中取得 id
 	id := chi.URLParam(r, "id")
 
-	user, err := s.Store.Get(id)
+	user, err := s.Store.Get(r.Context(), id)
 	if err != nil {
 		WriteError(w, http.StatusNotFound, "User not found")
 		return

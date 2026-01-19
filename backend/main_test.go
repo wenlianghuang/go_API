@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -9,6 +10,7 @@ import (
 	"testing"
 
 	"my-api/api"
+	"my-api/config"
 	"my-api/model"
 )
 
@@ -20,7 +22,7 @@ type MockStore struct {
 }
 
 // 實作 Storage 介面的 Create 方法
-func (m *MockStore) Create(u model.User) error {
+func (m *MockStore) Create(ctx context.Context, u model.User) error {
 	if m.ShouldError {
 		return errors.New("mock database error")
 	}
@@ -28,8 +30,8 @@ func (m *MockStore) Create(u model.User) error {
 }
 
 // 實作其他方法以滿足介面 (雖然這次測試用不到)
-func (m *MockStore) Get(id string) (model.User, error) { return model.User{}, nil }
-func (m *MockStore) GetUserByEmail(email string) (model.User, error) {
+func (m *MockStore) Get(ctx context.Context, id string) (model.User, error) { return model.User{}, nil }
+func (m *MockStore) GetUserByEmail(ctx context.Context, email string) (model.User, error) {
 	// 如果 ShouldError 為 true，返回錯誤表示用戶已存在
 	if m.ShouldError {
 		return model.User{}, errors.New("user already exists")
@@ -37,46 +39,67 @@ func (m *MockStore) GetUserByEmail(email string) (model.User, error) {
 	// 否則返回錯誤表示用戶不存在（這樣註冊才能成功）
 	return model.User{}, errors.New("user not found")
 }
-func (m *MockStore) List() ([]model.User, error) { return nil, nil }
+func (m *MockStore) List(ctx context.Context) ([]model.User, error) { return nil, nil }
 
 // 實作 Storage 介面的設備相關方法
-func (m *MockStore) CreateDevice(dev *model.Device) error               { return nil }
-func (m *MockStore) GetDeviceByID(id uint) (*model.Device, error)       { return nil, nil }
-func (m *MockStore) ListDevices() ([]model.Device, error)               { return nil, nil }
-func (m *MockStore) ListTelemetries() ([]model.Telemetry, error)        { return nil, nil }
-func (m *MockStore) AddTelemetry(data *model.Telemetry) error           { return nil }
-func (m *MockStore) GetTelemetryByID(id uint) (*model.Telemetry, error) { return nil, nil }
-func (m *MockStore) DeleteDeviceWithAllData(id uint) error {
+func (m *MockStore) CreateDevice(ctx context.Context, dev *model.Device) error { return nil }
+func (m *MockStore) GetDeviceByID(ctx context.Context, id uint) (*model.Device, error) {
+	return nil, nil
+}
+func (m *MockStore) ListDevices(ctx context.Context) ([]model.Device, error)        { return nil, nil }
+func (m *MockStore) ListTelemetries(ctx context.Context) ([]model.Telemetry, error) { return nil, nil }
+func (m *MockStore) AddTelemetry(ctx context.Context, data *model.Telemetry) error  { return nil }
+func (m *MockStore) GetTelemetryByID(ctx context.Context, id uint) (*model.Telemetry, error) {
+	return nil, nil
+}
+func (m *MockStore) DeleteDeviceWithAllData(ctx context.Context, id uint) error {
 	if m.ShouldError {
 		return errors.New("mock delete error")
 	}
 	return nil
 }
 
-func (m *MockStore) UpdateDevice(id uint, device *model.Device) error {
+func (m *MockStore) UpdateDevice(ctx context.Context, id uint, device *model.Device) error {
 	if m.ShouldError {
 		return errors.New("mock update error")
 	}
 	return nil
 }
 
-func (m *MockStore) PatchDevice(id uint, updates map[string]interface{}) error {
+func (m *MockStore) PatchDevice(ctx context.Context, id uint, updates map[string]interface{}) error {
 	if m.ShouldError {
 		return errors.New("mock patch error")
 	}
 	return nil
 }
-func (m *MockStore) PatchTelemetry(id uint, updates map[string]interface{}) error {
+func (m *MockStore) PatchTelemetry(ctx context.Context, id uint, updates map[string]interface{}) error {
 	if m.ShouldError {
 		return errors.New("mock patch error")
 	}
 	return nil
 }
-func (m *MockStore) DeleteTelemetry(id uint) error {
+func (m *MockStore) DeleteTelemetry(ctx context.Context, id uint) error {
 	if m.ShouldError {
 		return errors.New("mock delete error")
 	}
 	return nil
+}
+
+// createTestConfig 創建測試用的配置
+func createTestConfig() *config.Config {
+	return &config.Config{
+		Database: config.DatabaseConfig{
+			DSN: "test-dsn",
+		},
+		Redis: config.RedisConfig{
+			Addr: "localhost:6379",
+		},
+		App: config.AppConfig{
+			APIPort:     "8080",
+			MetricsPort: "9090",
+			JWTSecret:   "test-secret",
+		},
+	}
 }
 func TestHandleCreateUser(t *testing.T) {
 	// 定義測試表格 (Table)
@@ -111,7 +134,8 @@ func TestHandleCreateUser(t *testing.T) {
 			// 1. 準備依賴 (Arrange)
 			// 使用我們的 MockStore，而不是真實的 MemoryStore
 			mockStore := &MockStore{ShouldError: tt.mockShouldErr}
-			srv := api.NewServer(mockStore, "localhost:6379")
+			cfg := createTestConfig()
+			srv := api.NewServer(mockStore, cfg)
 
 			// 2. 準備請求 (Act)
 			// 把 map 轉成 json body

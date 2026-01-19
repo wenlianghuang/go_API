@@ -39,7 +39,7 @@ func (s *Server) HandleCreateTelemetry(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// 調用 service 執行業務邏輯
-	result, err := s.TelemetryService.CreateTelemetry(service.CreateTelemetryInput{
+	result, err := s.TelemetryService.CreateTelemetry(r.Context(), service.CreateTelemetryInput{
 		DeviceID:   req.DeviceID,
 		DataType:   req.DataType,
 		Value:      req.Value,
@@ -74,7 +74,7 @@ func (s *Server) HandleCreateTelemetry(w http.ResponseWriter, r *http.Request) {
 // @Failure      500  {object}  ErrorResponse
 // @Router       /telemetries [get]
 func (s *Server) HandleListTelemetries(w http.ResponseWriter, r *http.Request) {
-	telemetries, err := s.Store.ListTelemetries()
+	telemetries, err := s.Store.ListTelemetries(r.Context())
 	if err != nil {
 		WriteError(w, http.StatusInternalServerError, "Failed to fetch telemetries")
 		return
@@ -103,7 +103,7 @@ func (s *Server) HandleGetTelemetry(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	telemetry, err := s.Store.GetTelemetryByID(uint(id))
+	telemetry, err := s.Store.GetTelemetryByID(r.Context(), uint(id))
 	if err != nil {
 		WriteError(w, http.StatusNotFound, "Telemetry not found")
 		return
@@ -143,7 +143,7 @@ func (s *Server) HandlePatchTelemetry(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// 3. 調用 service 執行業務邏輯
-	result, err := s.TelemetryService.PatchTelemetry(uint(id), service.PatchTelemetryInput{
+	result, err := s.TelemetryService.PatchTelemetry(r.Context(), uint(id), service.PatchTelemetryInput{
 		DeviceID:   req.DeviceID,
 		DataType:   req.DataType,
 		Value:      req.Value,
@@ -207,7 +207,7 @@ func (s *Server) HandleDeleteTelemetry(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// 2. 調用 service 執行業務邏輯
-	err = s.TelemetryService.DeleteTelemetry(uint(id))
+	err = s.TelemetryService.DeleteTelemetry(r.Context(), uint(id))
 	if err != nil {
 		// 處理錯誤並轉換為適當的 HTTP 狀態碼
 		errMsg := err.Error()

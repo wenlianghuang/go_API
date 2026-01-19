@@ -1,6 +1,7 @@
 package service
 
 import (
+	"context"
 	"fmt"
 	"my-api/model"
 	"my-api/store"
@@ -11,8 +12,8 @@ import (
 
 // AuthService 處理認證相關的業務邏輯
 type AuthService struct {
-	store        store.Storage
-	jwtGenerator JWTGenerator // JWT 生成器接口
+	Store        store.Storage
+	JWTGenerator JWTGenerator // JWT 生成器接口（改為公開，以便 middleware 使用）
 }
 
 // JWTGenerator 定義 JWT 生成的接口，避免循環依賴
@@ -32,8 +33,8 @@ type JWTClaims interface {
 // NewAuthService 創建一個新的 AuthService 實例
 func NewAuthService(store store.Storage, jwtGenerator JWTGenerator) *AuthService {
 	return &AuthService{
-		store:        store,
-		jwtGenerator: jwtGenerator,
+		Store:        store,
+		JWTGenerator: jwtGenerator,
 	}
 }
 
@@ -53,9 +54,9 @@ type RegisterResult struct {
 
 // Register 處理用戶註冊業務邏輯
 // 返回 RegisterResult 和錯誤
-func (s *AuthService) Register(input RegisterInput) (*RegisterResult, error) {
+func (s *AuthService) Register(ctx context.Context, input RegisterInput) (*RegisterResult, error) {
 	// 檢查用戶是否已存在
-	if _, err := s.store.GetUserByEmail(input.Email); err == nil {
+	if _, err := s.Store.GetUserByEmail(ctx, input.Email); err == nil {
 		return nil, fmt.Errorf("user with this email already exists")
 	}
 
@@ -75,12 +76,12 @@ func (s *AuthService) Register(input RegisterInput) (*RegisterResult, error) {
 	}
 
 	// 保存到數據庫
-	if err := s.store.Create(user); err != nil {
+	if err := s.Store.Create(ctx, user); err != nil {
 		return nil, fmt.Errorf("failed to create user: %w", err)
 	}
 
 	// 生成 JWT token
-	token, err := s.jwtGenerator.GenerateJWT(user.ID, user.Username, user.Email, 5) // 5分鐘過期
+	token, err := s.JWTGenerator.GenerateJWT(user.ID, user.Username, user.Email, 5) // 5分鐘過期
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate token: %w", err)
 	}
@@ -89,7 +90,7 @@ func (s *AuthService) Register(input RegisterInput) (*RegisterResult, error) {
 	result := &RegisterResult{
 		User:      user,
 		Token:     token,
-		ExpiresAt: time.Now().Add(5 * time.Minute),
+		ExpiresAt: time.Now().Add(30 * time.Minute),
 	}
 
 	return result, nil
@@ -106,9 +107,9 @@ type LoginResult = RegisterResult
 
 // Login 處理用戶登入業務邏輯
 // 返回 LoginResult 和錯誤
-func (s *AuthService) Login(input LoginInput) (*LoginResult, error) {
+func (s *AuthService) Login(ctx context.Context, input LoginInput) (*LoginResult, error) {
 	// 根據 email 查找用戶
-	user, err := s.store.GetUserByEmail(input.Email)
+	user, err := s.Store.GetUserByEmail(ctx, input.Email)
 	if err != nil {
 		return nil, fmt.Errorf("invalid email or password")
 	}
@@ -119,7 +120,7 @@ func (s *AuthService) Login(input LoginInput) (*LoginResult, error) {
 	}
 
 	// 生成 JWT token
-	token, err := s.jwtGenerator.GenerateJWT(user.ID, user.Username, user.Email, 5) // 5分鐘過期
+	token, err := s.JWTGenerator.GenerateJWT(user.ID, user.Username, user.Email, 5) // 5分鐘過期
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate token: %w", err)
 	}
@@ -128,7 +129,7 @@ func (s *AuthService) Login(input LoginInput) (*LoginResult, error) {
 	result := &LoginResult{
 		User:      user,
 		Token:     token,
-		ExpiresAt: time.Now().Add(5 * time.Minute),
+		ExpiresAt: time.Now().Add(30 * time.Minute),
 	}
 
 	return result, nil
@@ -144,21 +145,21 @@ type RefreshTokenResult = RegisterResult
 
 // RefreshToken 處理刷新 token 業務邏輯
 // 返回 RefreshTokenResult 和錯誤
-func (s *AuthService) RefreshToken(input RefreshTokenInput) (*RefreshTokenResult, error) {
+func (s *AuthService) RefreshToken(ctx context.Context, input RefreshTokenInput) (*RefreshTokenResult, error) {
 	// 刷新 token
-	newToken, err := s.jwtGenerator.RefreshJWT(input.TokenString)
+	newToken, err := s.JWTGenerator.RefreshJWT(input.TokenString)
 	if err != nil {
 		return nil, fmt.Errorf("invalid or expired token: %w", err)
 	}
 
 	// 解析新 token 以獲取用戶信息
-	claims, err := s.jwtGenerator.ValidateJWT(newToken)
+	claims, err := s.JWTGenerator.ValidateJWT(newToken)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse new token: %w", err)
 	}
 
 	// 從數據庫獲取用戶最新信息
-	user, err := s.store.Get(claims.GetUserID())
+	user, err := s.Store.Get(ctx, claims.GetUserID())
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch user: %w", err)
 	}
@@ -167,7 +168,7 @@ func (s *AuthService) RefreshToken(input RefreshTokenInput) (*RefreshTokenResult
 	result := &RefreshTokenResult{
 		User:      user,
 		Token:     newToken,
-		ExpiresAt: time.Now().Add(5 * time.Minute),
+		ExpiresAt: time.Now().Add(30 * time.Minute),
 	}
 
 	return result, nil

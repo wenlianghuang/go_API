@@ -34,8 +34,8 @@ func (s *Server) AuthMiddleware(next http.Handler) http.Handler {
 
 		tokenString := parts[1]
 
-		// C. 驗證並解析 JWT Token
-		claims, err := ValidateJWT(tokenString)
+		// C. 驗證並解析 JWT Token（使用 Server 的 JWTService）
+		claims, err := s.AuthService.JWTGenerator.ValidateJWT(tokenString)
 		if err != nil {
 			WriteError(w, http.StatusUnauthorized, "Invalid or expired token: "+err.Error())
 			return
@@ -43,7 +43,7 @@ func (s *Server) AuthMiddleware(next http.Handler) http.Handler {
 
 		// D. 【關鍵】將解析出的 UserID 注入到 Context 中
 		// 這樣後續的 Handler 就可以通過 GetUserIDFromContext 取得當前用戶 ID
-		ctx := context.WithValue(r.Context(), UserIDKey, claims.UserID)
+		ctx := context.WithValue(r.Context(), UserIDKey, claims.GetUserID())
 
 		// 可選：也可以將完整的 claims 注入 context（如果需要 username, email 等）
 		// 這裡我們只注入 UserID，保持簡單

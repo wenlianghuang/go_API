@@ -2,7 +2,9 @@ package api
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
+	"my-api/config"
 	"my-api/model"
 	"net/http"
 	"net/http/httptest"
@@ -21,102 +23,117 @@ type MockStore struct {
 }
 
 // User 相關方法
-func (m *MockStore) Create(u model.User) error {
-	args := m.Called(mock.Anything) // 註冊時 ID 是動態生成的，所以用 Anything
+func (m *MockStore) Create(ctx context.Context, u model.User) error {
+	args := m.Called(ctx, mock.Anything) // 註冊時 ID 是動態生成的，所以用 Anything
 	return args.Error(0)
 }
 
-func (m *MockStore) Get(id string) (model.User, error) {
-	args := m.Called(id)
+func (m *MockStore) Get(ctx context.Context, id string) (model.User, error) {
+	args := m.Called(ctx, id)
 	return args.Get(0).(model.User), args.Error(1)
 }
 
-func (m *MockStore) GetUserByEmail(email string) (model.User, error) {
-	args := m.Called(email)
+func (m *MockStore) GetUserByEmail(ctx context.Context, email string) (model.User, error) {
+	args := m.Called(ctx, email)
 	return args.Get(0).(model.User), args.Error(1)
 }
 
-func (m *MockStore) List() ([]model.User, error) {
-	args := m.Called()
+func (m *MockStore) List(ctx context.Context) ([]model.User, error) {
+	args := m.Called(ctx)
 	return args.Get(0).([]model.User), args.Error(1)
 }
 
 // 設備相關方法
-func (m *MockStore) CreateDevice(dev *model.Device) error {
-	args := m.Called(dev)
+func (m *MockStore) CreateDevice(ctx context.Context, dev *model.Device) error {
+	args := m.Called(ctx, dev)
 	return args.Error(0)
 }
 
-func (m *MockStore) GetDeviceByID(id uint) (*model.Device, error) {
-	args := m.Called(id)
+func (m *MockStore) GetDeviceByID(ctx context.Context, id uint) (*model.Device, error) {
+	args := m.Called(ctx, id)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
 	return args.Get(0).(*model.Device), args.Error(1)
 }
 
-func (m *MockStore) ListDevices() ([]model.Device, error) {
-	args := m.Called()
+func (m *MockStore) ListDevices(ctx context.Context) ([]model.Device, error) {
+	args := m.Called(ctx)
 	return args.Get(0).([]model.Device), args.Error(1)
 }
 
-func (m *MockStore) DeleteDeviceWithAllData(id uint) error {
-	args := m.Called(id)
+func (m *MockStore) DeleteDeviceWithAllData(ctx context.Context, id uint) error {
+	args := m.Called(ctx, id)
 	return args.Error(0)
 }
 
-func (m *MockStore) UpdateDevice(id uint, device *model.Device) error {
-	args := m.Called(id, device)
+func (m *MockStore) UpdateDevice(ctx context.Context, id uint, device *model.Device) error {
+	args := m.Called(ctx, id, device)
 	return args.Error(0)
 }
 
-func (m *MockStore) PatchDevice(id uint, updates map[string]interface{}) error {
-	args := m.Called(id, updates)
+func (m *MockStore) PatchDevice(ctx context.Context, id uint, updates map[string]interface{}) error {
+	args := m.Called(ctx, id, updates)
 	return args.Error(0)
 }
 
 // 遙測數據相關方法
-func (m *MockStore) ListTelemetries() ([]model.Telemetry, error) {
-	args := m.Called()
+func (m *MockStore) ListTelemetries(ctx context.Context) ([]model.Telemetry, error) {
+	args := m.Called(ctx)
 	return args.Get(0).([]model.Telemetry), args.Error(1)
 }
 
-func (m *MockStore) AddTelemetry(data *model.Telemetry) error {
-	args := m.Called(data)
+func (m *MockStore) AddTelemetry(ctx context.Context, data *model.Telemetry) error {
+	args := m.Called(ctx, data)
 	return args.Error(0)
 }
 
-func (m *MockStore) GetTelemetryByID(id uint) (*model.Telemetry, error) {
-	args := m.Called(id)
+func (m *MockStore) GetTelemetryByID(ctx context.Context, id uint) (*model.Telemetry, error) {
+	args := m.Called(ctx, id)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
 	return args.Get(0).(*model.Telemetry), args.Error(1)
 }
 
-func (m *MockStore) PatchTelemetry(id uint, updates map[string]interface{}) error {
-	args := m.Called(id, updates)
+func (m *MockStore) PatchTelemetry(ctx context.Context, id uint, updates map[string]interface{}) error {
+	args := m.Called(ctx, id, updates)
 	return args.Error(0)
 }
 
-func (m *MockStore) DeleteTelemetry(id uint) error {
-	args := m.Called(id)
+func (m *MockStore) DeleteTelemetry(ctx context.Context, id uint) error {
+	args := m.Called(ctx, id)
 	return args.Error(0)
+}
+
+// createTestConfig 創建測試用的配置
+func createTestConfig() *config.Config {
+	return &config.Config{
+		Database: config.DatabaseConfig{
+			DSN: "test-dsn",
+		},
+		Redis: config.RedisConfig{
+			Addr: "localhost:6379",
+		},
+		App: config.AppConfig{
+			APIPort:     "8080",
+			MetricsPort: "9090",
+			JWTSecret:   "test-secret",
+		},
+	}
 }
 
 func TestHandleRegister_Success(t *testing.T) {
 	// 1. 初始化
 	mockStore := new(MockStore)
-	srv := NewServer(mockStore, "localhost:6379")
-
-	// 設定環境變數供 JWT 使用
-	JWTSecret = "test-secret"
+	cfg := createTestConfig()
+	srv := NewServer(mockStore, cfg)
 
 	// 2. 定義 Mock 行為 (Expectations)
 	// 當 Handler 呼叫 GetUserByEmail 時，回傳「找不到記錄」
-	mockStore.On("GetUserByEmail", "new@example.com").Return(model.User{}, gorm.ErrRecordNotFound)
+	mockStore.On("GetUserByEmail", mock.Anything, "new@example.com").Return(model.User{}, gorm.ErrRecordNotFound)
 	// 當 Handler 呼叫 Create 時，回傳 nil (成功)
-	mockStore.On("Create", mock.Anything).Return(nil)
+	mockStore.On("Create", mock.Anything, mock.Anything).Return(nil)
 
 	// 3. 準備請求
 	reqBody := RegisterRequest{
@@ -147,10 +164,8 @@ func TestHandleRegister_Success(t *testing.T) {
 func TestHandleLogin_Success(t *testing.T) {
 	// 1. 初始化
 	mockStore := new(MockStore)
-	srv := NewServer(mockStore, "localhost:6379")
-
-	// 設定環境變數供 JWT 使用
-	JWTSecret = "test-secret"
+	cfg := createTestConfig()
+	srv := NewServer(mockStore, cfg)
 
 	// 生成真正的 bcrypt 哈希值用於測試
 	// 密碼是 "password123"
@@ -159,7 +174,7 @@ func TestHandleLogin_Success(t *testing.T) {
 
 	// 2. 定義 Mock 行為 (Expectations)
 	// 當 Handler 呼叫 GetUserByEmail 時，回傳「找到記錄」
-	mockStore.On("GetUserByEmail", "existing@example.com").Return(model.User{
+	mockStore.On("GetUserByEmail", mock.Anything, "existing@example.com").Return(model.User{
 		ID:       "usr_123",
 		Username: "existinguser",
 		Email:    "existing@example.com",
