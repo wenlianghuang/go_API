@@ -45,7 +45,7 @@ func (s *Server) HandleCreateTelemetry(w http.ResponseWriter, r *http.Request) {
 		RecordedAt: req.RecordedAt,
 	})
 	if err != nil {
-		errors.HandleError(w, err)
+		errors.HandleError(w, err, s.ErrorLogger)
 		return
 	}
 
@@ -69,7 +69,7 @@ func (s *Server) HandleCreateTelemetry(w http.ResponseWriter, r *http.Request) {
 func (s *Server) HandleListTelemetries(w http.ResponseWriter, r *http.Request) {
 	telemetries, err := s.Store.ListTelemetries(r.Context())
 	if err != nil {
-		errors.HandleError(w, errors.NewInternalError("fetch telemetries", err))
+		errors.HandleError(w, errors.NewInternalError("fetch telemetries", err), s.ErrorLogger)
 		return
 	}
 	WriteJSON(w, http.StatusOK, telemetries)
@@ -92,13 +92,13 @@ func (s *Server) HandleGetTelemetry(w http.ResponseWriter, r *http.Request) {
 	idStr := chi.URLParam(r, "id")
 	id, err := strconv.ParseUint(idStr, 10, 32)
 	if err != nil {
-		errors.HandleError(w, errors.NewBadRequestError("Invalid telemetry ID"))
+		errors.HandleError(w, errors.NewBadRequestError("Invalid telemetry ID"), s.ErrorLogger)
 		return
 	}
 
 	telemetry, err := s.Store.GetTelemetryByID(r.Context(), uint(id))
 	if err != nil {
-		errors.HandleError(w, errors.NewTelemetryNotFoundError(uint(id)))
+		errors.HandleError(w, errors.NewTelemetryNotFoundError(uint(id)), s.ErrorLogger)
 		return
 	}
 	WriteJSON(w, http.StatusOK, telemetry)
@@ -124,7 +124,7 @@ func (s *Server) HandlePatchTelemetry(w http.ResponseWriter, r *http.Request) {
 	idStr := chi.URLParam(r, "id")
 	id, err := strconv.ParseUint(idStr, 10, 32)
 	if err != nil {
-		errors.HandleError(w, errors.NewBadRequestError("Invalid telemetry ID"))
+		errors.HandleError(w, errors.NewBadRequestError("Invalid telemetry ID"), s.ErrorLogger)
 		return
 	}
 
@@ -143,7 +143,7 @@ func (s *Server) HandlePatchTelemetry(w http.ResponseWriter, r *http.Request) {
 		RecordedAt: req.RecordedAt,
 	})
 	if err != nil {
-		errors.HandleError(w, err)
+		errors.HandleError(w, err, s.ErrorLogger)
 		return
 	}
 
@@ -172,14 +172,14 @@ func (s *Server) HandleDeleteTelemetry(w http.ResponseWriter, r *http.Request) {
 	idStr := chi.URLParam(r, "id")
 	id, err := strconv.ParseUint(idStr, 10, 32)
 	if err != nil {
-		errors.HandleError(w, errors.NewBadRequestError("Invalid telemetry ID"))
+		errors.HandleError(w, errors.NewBadRequestError("Invalid telemetry ID"), s.ErrorLogger)
 		return
 	}
 
 	// 2. 調用 service 執行業務邏輯
 	err = s.TelemetryService.DeleteTelemetry(r.Context(), uint(id))
 	if err != nil {
-		errors.HandleError(w, err)
+		errors.HandleError(w, err, s.ErrorLogger)
 		return
 	}
 

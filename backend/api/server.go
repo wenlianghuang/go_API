@@ -10,12 +10,51 @@ import (
 	"sync"
 	"time"
 
+	"my-api/errors"
+
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/redis/go-redis/v9"
 	httpSwagger "github.com/swaggo/http-swagger"
 	"go.uber.org/zap"
 )
+
+// ZapErrorLogger 實作 errors.ErrorLogger，包裝 zap.Logger
+type ZapErrorLogger struct {
+	logger *zap.Logger
+}
+
+// NewZapErrorLogger 創建一個新的 ZapErrorLogger
+func NewZapErrorLogger(logger *zap.Logger) *ZapErrorLogger {
+	return &ZapErrorLogger{logger: logger}
+}
+
+// LogError 實作 errors.ErrorLogger 介面
+// 根據 statusCode 決定 log level：
+// - >= 500: Error
+// - >= 400: Warn
+// - 其他: Info
+func (l *ZapErrorLogger) LogError(statusCode int, fields map[string]interface{}) {
+	if l.logger == nil {
+		return
+	}
+
+	// 轉換 map[string]interface{} 為 zap.Field
+	zapFields := make([]zap.Field, 0, len(fields))
+	for k, v := range fields {
+		zapFields = append(zapFields, zap.Any(k, v))
+	}
+
+	// 根據 status code 決定 log level
+	switch {
+	case statusCode >= 500:
+		l.logger.Error("application error", zapFields...)
+	case statusCode >= 400:
+		l.logger.Warn("application error", zapFields...)
+	default:
+		l.logger.Info("application error", zapFields...)
+	}
+}
 
 // Server 結構體持有所有的依賴 (Router 和 Storage)
 type Server struct {
@@ -28,6 +67,7 @@ type Server struct {
 	Hub              *Hub                      // 存放 WebSocket 的 Hub
 	Config           *config.Config            // 配置
 	Logger           *zap.Logger               // structured logger (zap)
+	ErrorLogger      errors.ErrorLogger        // 錯誤記錄器（包裝 zap）
 
 	// 🆕 優雅停機支援
 	workerWg     sync.WaitGroup     // 用於等待 worker goroutine 完成
@@ -55,8 +95,9 @@ func NewServer(store store.Storage, cfg *config.Config, log *zap.Logger) *Server
 		Hub:              NewHub(rdb, log),
 		Config:           cfg,
 		Logger:           log,
-		workerCtx:        ctx,    // 🆕 儲存 context
-		workerCancel:     cancel, // 🆕 儲存 cancel 函數
+		ErrorLogger:      NewZapErrorLogger(log), // 🆕 初始化 ErrorLogger
+		workerCtx:        ctx,                    // 🆕 儲存 context
+		workerCancel:     cancel,                 // 🆕 儲存 cancel 函數
 	}
 
 	// 🆕 使用 WaitGroup 追蹤 worker goroutine，以便停機時等待
