@@ -127,7 +127,7 @@ func TestHandleRegister_Success(t *testing.T) {
 	// 1. 初始化
 	mockStore := new(MockStore)
 	cfg := createTestConfig()
-	srv := NewServer(mockStore, cfg)
+	srv := NewServer(mockStore, cfg, nil)
 
 	// 2. 定義 Mock 行為 (Expectations)
 	// 當 Handler 呼叫 GetUserByEmail 時，回傳「找不到記錄」
@@ -165,7 +165,7 @@ func TestHandleLogin_Success(t *testing.T) {
 	// 1. 初始化
 	mockStore := new(MockStore)
 	cfg := createTestConfig()
-	srv := NewServer(mockStore, cfg)
+	srv := NewServer(mockStore, cfg, nil)
 
 	// 生成真正的 bcrypt 哈希值用於測試
 	// 密碼是 "password123"

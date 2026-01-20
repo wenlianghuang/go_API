@@ -27,6 +27,12 @@ type AppConfig struct {
 	APIPort     string
 	MetricsPort string
 	JWTSecret   string
+	// Env controls runtime behavior (e.g. logger format).
+	// Common values: "development", "production"
+	Env string
+	// LogLevel controls zap logging level.
+	// Common values: "debug", "info", "warn", "error"
+	LogLevel string
 }
 
 // LoadConfig 載入配置並驗證（快速失敗）
@@ -59,6 +65,18 @@ func LoadConfig() (*Config, error) {
 	cfg.App.JWTSecret = os.Getenv("JWT_SECRET")
 	if cfg.App.JWTSecret == "" {
 		return nil, fmt.Errorf("JWT_SECRET is required but not set")
+	}
+
+	// Optional: environment + logging
+	cfg.App.Env = os.Getenv("ENV")
+	if cfg.App.Env == "" {
+		cfg.App.Env = "development"
+	}
+
+	cfg.App.LogLevel = os.Getenv("LOG_LEVEL")
+	if cfg.App.LogLevel == "" {
+		// Keep logs readable locally; production can override to "info"
+		cfg.App.LogLevel = "debug"
 	}
 
 	return cfg, nil

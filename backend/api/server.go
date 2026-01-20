@@ -14,6 +14,7 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/redis/go-redis/v9"
 	httpSwagger "github.com/swaggo/http-swagger"
+	"go.uber.org/zap"
 )
 
 // Server 結構體持有所有的依賴 (Router 和 Storage)
@@ -26,6 +27,7 @@ type Server struct {
 	TaskChan         chan uint                 // 存放設備 ID 的任務通道
 	Hub              *Hub                      // 存放 WebSocket 的 Hub
 	Config           *config.Config            // 配置
+	Logger           *zap.Logger               // structured logger (zap)
 
 	// 🆕 優雅停機支援
 	workerWg     sync.WaitGroup     // 用於等待 worker goroutine 完成
@@ -34,7 +36,7 @@ type Server struct {
 }
 
 // NewServer 初始化 Server 並掛載路由
-func NewServer(store store.Storage, cfg *config.Config) *Server {
+func NewServer(store store.Storage, cfg *config.Config, log *zap.Logger) *Server {
 	// 1. 初始化 Redis
 	rdb := redis.NewClient(&redis.Options{
 		Addr: cfg.Redis.Addr, // 使用配置中的 Redis 位址
@@ -50,8 +52,9 @@ func NewServer(store store.Storage, cfg *config.Config) *Server {
 		DeviceService:    service.NewDeviceService(store),
 		TelemetryService: service.NewTelemetryService(store),
 		TaskChan:         make(chan uint, 100), // 設定通道大小為 100
-		Hub:              NewHub(rdb),
+		Hub:              NewHub(rdb, log),
 		Config:           cfg,
+		Logger:           log,
 		workerCtx:        ctx,    // 🆕 儲存 context
 		workerCancel:     cancel, // 🆕 儲存 cancel 函數
 	}
@@ -69,33 +72,69 @@ func NewServer(store store.Storage, cfg *config.Config) *Server {
 func (s *Server) startWorker() {
 	// 🆕 確保在函數退出時標記 WaitGroup 完成
 	defer s.workerWg.Done()
-	fmt.Println("👷 Worker 已啟動，等待任務中...")
+	if s.Logger != nil {
+		s.Logger.Info("worker started")
+	} else {
+		fmt.Println("👷 Worker 已啟動，等待任務中...")
+	}
 
 	// 🆕 使用 select 監聽 context 取消信號和任務通道
 	for {
 		select {
 		case <-s.workerCtx.Done():
 			// 🆕 收到停機信號，處理完 channel 中剩餘的任務後退出
-			fmt.Println("🛑 Worker 收到停機信號，處理剩餘任務中...")
+			if s.Logger != nil {
+				s.Logger.Info("worker received shutdown signal; draining remaining tasks")
+			} else {
+				fmt.Println("🛑 Worker 收到停機信號，處理剩餘任務中...")
+			}
 			// 持續從 TaskChan 讀取，直到 channel 被關閉
 			for id := range s.TaskChan {
-				fmt.Printf("👷 Worker 正在處理剩餘任務，設備 ID: %d\n", id)
+				if s.Logger != nil {
+					s.Logger.Info("worker processing remaining task", zap.Uint("device_id", id))
+				} else {
+					fmt.Printf("👷 Worker 正在處理剩餘任務，設備 ID: %d\n", id)
+				}
 				time.Sleep(5 * time.Second) // 模擬耗時計算
-				fmt.Printf("👷 Worker 處理 ID: %d 完成\n", id)
+				if s.Logger != nil {
+					s.Logger.Info("worker finished remaining task", zap.Uint("device_id", id))
+				} else {
+					fmt.Printf("👷 Worker 處理 ID: %d 完成\n", id)
+				}
 			}
-			fmt.Println("✅ Worker 已處理完所有剩餘任務")
+			if s.Logger != nil {
+				s.Logger.Info("worker drained remaining tasks; exiting")
+			} else {
+				fmt.Println("✅ Worker 已處理完所有剩餘任務")
+			}
 			return
 
 		case id, ok := <-s.TaskChan:
 			// 🆕 檢查 channel 是否已關閉
 			if !ok {
-				fmt.Println("✅ TaskChan 已關閉，Worker 退出")
+				if s.Logger != nil {
+					s.Logger.Info("task channel closed; worker exiting")
+				} else {
+					fmt.Println("✅ TaskChan 已關閉，Worker 退出")
+				}
 				return
 			}
 			// 正常處理任務
-			fmt.Printf("👷 Worker 正在處理設備 ID: %d\n", id)
+			start := time.Now()
+			if s.Logger != nil {
+				s.Logger.Info("worker processing task", zap.Uint("device_id", id))
+			} else {
+				fmt.Printf("👷 Worker 正在處理設備 ID: %d\n", id)
+			}
 			time.Sleep(5 * time.Second) // 模擬耗時計算
-			fmt.Printf("👷 Worker 處理 ID: %d 完成\n", id)
+			if s.Logger != nil {
+				s.Logger.Info("worker finished task",
+					zap.Uint("device_id", id),
+					zap.Duration("duration", time.Since(start)),
+				)
+			} else {
+				fmt.Printf("👷 Worker 處理 ID: %d 完成\n", id)
+			}
 		}
 	}
 }
@@ -107,7 +146,12 @@ func (s *Server) mountRoutes() {
 	// WebSocket 將在 main.go 中使用標準 http.ServeMux 單獨處理
 
 	// 其他中間件（應用於所有其他路由）
-	s.Router.Use(middleware.Logger)
+	// Replace chi's default logger with zap structured logging
+	if s.Logger != nil {
+		s.Router.Use(ZapHTTPLogger(s.Logger))
+	} else {
+		s.Router.Use(middleware.Logger)
+	}
 	s.Router.Use(middleware.Recoverer)
 	s.Router.Use(middleware.RequestID)
 	s.Router.Use(MetricsMiddleware) // Add metrics middleware
@@ -177,7 +221,11 @@ func (s *Server) mountRoutes() {
 // 4. 關閉 WebSocket Hub（包括所有連接和 Redis 監聽器）
 // 5. 關閉 Redis 連接
 func (s *Server) Shutdown(ctx context.Context) error {
-	fmt.Println("🔄 正在關閉 Server 背景任務...")
+	if s.Logger != nil {
+		s.Logger.Info("shutting down server background tasks")
+	} else {
+		fmt.Println("🔄 正在關閉 Server 背景任務...")
+	}
 
 	// 步驟 1：取消 worker context，通知不再接受新任務
 	s.workerCancel()
@@ -194,25 +242,49 @@ func (s *Server) Shutdown(ctx context.Context) error {
 
 	select {
 	case <-workerDone:
-		fmt.Println("✅ Worker 已安全關閉")
+		if s.Logger != nil {
+			s.Logger.Info("worker stopped")
+		} else {
+			fmt.Println("✅ Worker 已安全關閉")
+		}
 	case <-ctx.Done():
 		// 超時了，但我們會繼續關閉其他組件
-		fmt.Println("⚠️ Worker 停機超時（但已發送停止信號）")
+		if s.Logger != nil {
+			s.Logger.Warn("worker shutdown timed out (stop signal sent)")
+		} else {
+			fmt.Println("⚠️ Worker 停機超時（但已發送停止信號）")
+		}
 	}
 
 	// 步驟 4：關閉 WebSocket Hub（包括所有連接和 Redis 監聽器）
 	if err := s.Hub.Shutdown(ctx); err != nil {
 		// 記錄錯誤但繼續關閉流程
-		fmt.Printf("⚠️ Hub 停機時發生錯誤: %v\n", err)
+		if s.Logger != nil {
+			s.Logger.Warn("hub shutdown error", zap.Error(err))
+		} else {
+			fmt.Printf("⚠️ Hub 停機時發生錯誤: %v\n", err)
+		}
 	}
 
 	// 步驟 5：關閉 Redis 連接
-	fmt.Println("🔄 正在關閉 Redis 連接...")
+	if s.Logger != nil {
+		s.Logger.Info("closing redis connection")
+	} else {
+		fmt.Println("🔄 正在關閉 Redis 連接...")
+	}
 	if err := s.Hub.rdb.Close(); err != nil {
 		return fmt.Errorf("Redis 關閉失敗: %w", err)
 	}
-	fmt.Println("✅ Redis 連接已關閉")
+	if s.Logger != nil {
+		s.Logger.Info("redis connection closed")
+	} else {
+		fmt.Println("✅ Redis 連接已關閉")
+	}
 
-	fmt.Println("✅ Server 背景任務已全部關閉")
+	if s.Logger != nil {
+		s.Logger.Info("server background tasks stopped")
+	} else {
+		fmt.Println("✅ Server 背景任務已全部關閉")
+	}
 	return nil
 }

@@ -135,7 +135,7 @@ func TestHandleCreateUser(t *testing.T) {
 			// 使用我們的 MockStore，而不是真實的 MemoryStore
 			mockStore := &MockStore{ShouldError: tt.mockShouldErr}
 			cfg := createTestConfig()
-			srv := api.NewServer(mockStore, cfg)
+			srv := api.NewServer(mockStore, cfg, nil)
 
 			// 2. 準備請求 (Act)
 			// 把 map 轉成 json body

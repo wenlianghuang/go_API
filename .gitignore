@@ -39,3 +39,4 @@ backend/api/*_backup*
 my-api
 
 .vscode/
+*/.gocache/*

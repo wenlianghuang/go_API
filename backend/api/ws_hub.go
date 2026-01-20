@@ -13,6 +13,7 @@ import (
 
 	"github.com/gorilla/websocket"
 	"github.com/redis/go-redis/v9"
+	"go.uber.org/zap"
 )
 
 type Hub struct {
@@ -22,6 +23,8 @@ type Hub struct {
 
 	// Redis 客戶端
 	rdb *redis.Client
+
+	log *zap.Logger
 
 	// Redis 監聽的模式列表
 	redisPatterns []string
@@ -33,7 +36,7 @@ type Hub struct {
 	wg     sync.WaitGroup     // 用於等待 goroutine 完成
 }
 
-func NewHub(rdb *redis.Client) *Hub {
+func NewHub(rdb *redis.Client, log *zap.Logger) *Hub {
 	// 定義要監聽的 Redis 模式列表
 	patterns := []string{
 		"device:*", // 設備相關訊息
@@ -47,6 +50,7 @@ func NewHub(rdb *redis.Client) *Hub {
 	h := &Hub{
 		topics:        make(map[string]map[*websocket.Conn]bool),
 		rdb:           rdb,
+		log:           log,
 		redisPatterns: patterns,
 		ctx:           ctx,    // 🆕 儲存 context
 		cancel:        cancel, // 🆕 儲存 cancel 函數
@@ -72,31 +76,51 @@ func (h *Hub) listenToRedis() {
 	defer h.pubsub.Close()
 
 	ch := h.pubsub.Channel()
-	fmt.Printf("👷 Redis 監聽器已啟動，監聽模式: %v\n", h.redisPatterns)
+	if h.log != nil {
+		h.log.Info("redis listener started", zap.Strings("patterns", h.redisPatterns))
+	} else {
+		fmt.Printf("👷 Redis 監聽器已啟動，監聽模式: %v\n", h.redisPatterns)
+	}
 
 	// 🆕 使用 select 監聽 context 取消信號和 Redis 訊息
 	for {
 		select {
 		case <-h.ctx.Done():
 			// 🆕 收到停機信號，優雅退出
-			fmt.Println("🛑 Redis 監聽器收到停機信號，準備關閉...")
+			if h.log != nil {
+				h.log.Info("redis listener received shutdown signal")
+			} else {
+				fmt.Println("🛑 Redis 監聽器收到停機信號，準備關閉...")
+			}
 			return
 
 		case msg, ok := <-ch:
 			// 🆕 檢查 channel 是否已關閉
 			if !ok {
-				log.Printf("⚠️ Redis 監聽器 channel 已關閉")
+				if h.log != nil {
+					h.log.Warn("redis listener channel closed")
+				} else {
+					log.Printf("⚠️ Redis 監聽器 channel 已關閉")
+				}
 				return
 			}
 			// 當 Redis 收到訊息時，msg.Channel 就是 Topic (如 device:1 或 value:22.5)
 			// msg.Payload 就是數據內容
 			if msg == nil {
-				log.Printf("⚠️ Redis 收到 nil 訊息，可能連接已關閉")
+				if h.log != nil {
+					h.log.Warn("redis received nil message (connection may be closed)")
+				} else {
+					log.Printf("⚠️ Redis 收到 nil 訊息，可能連接已關閉")
+				}
 				return
 			}
 			// 檢查是否為錯誤訊息（go-redis 會在錯誤時發送特殊格式的訊息）
 			if msg.Payload == "" && msg.Channel == "" {
-				log.Printf("⚠️ Redis 收到空訊息")
+				if h.log != nil {
+					h.log.Warn("redis received empty message")
+				} else {
+					log.Printf("⚠️ Redis 收到空訊息")
+				}
 				continue
 			}
 			// 正常處理訊息
@@ -151,7 +175,11 @@ func (h *Hub) broadcastToLocal(topic string, payload string) {
 	for conn := range clientsToNotify {
 		err := conn.WriteMessage(websocket.TextMessage, []byte(payload))
 		if err != nil {
-			log.Printf("⚠️ 發送訊息到 WebSocket 失敗: %v", err)
+			if h.log != nil {
+				h.log.Warn("websocket write failed", zap.Error(err))
+			} else {
+				log.Printf("⚠️ 發送訊息到 WebSocket 失敗: %v", err)
+			}
 			toRemove = append(toRemove, conn)
 		}
 	}
@@ -169,7 +197,11 @@ func (h *Hub) broadcastToLocal(topic string, payload string) {
 			}
 		}
 		if err := conn.Close(); err != nil {
-			log.Printf("⚠️ 關閉失敗的 WebSocket 連接時發生錯誤: %v", err)
+			if h.log != nil {
+				h.log.Warn("closing failed websocket connection failed", zap.Error(err))
+			} else {
+				log.Printf("⚠️ 關閉失敗的 WebSocket 連接時發生錯誤: %v", err)
+			}
 		}
 	}
 }
@@ -183,7 +215,11 @@ func (h *Hub) Subscribe(topic string, conn *websocket.Conn) {
 		h.topics[topic] = make(map[*websocket.Conn]bool)
 	}
 	h.topics[topic][conn] = true
-	fmt.Printf("🌐 本地用戶訂閱了 Redis 頻道: %s\n", topic)
+	if h.log != nil {
+		h.log.Info("websocket subscribed", zap.String("topic", topic))
+	} else {
+		fmt.Printf("🌐 本地用戶訂閱了 Redis 頻道: %s\n", topic)
+	}
 }
 
 // Unsubscribe 取消訂閱特定頻道
@@ -197,7 +233,11 @@ func (h *Hub) Unsubscribe(topic string, conn *websocket.Conn) {
 	}
 
 	delete(clients, conn)
-	fmt.Printf("🌐 本地用戶取消訂閱 Redis 頻道: %s\n", topic)
+	if h.log != nil {
+		h.log.Info("websocket unsubscribed", zap.String("topic", topic))
+	} else {
+		fmt.Printf("🌐 本地用戶取消訂閱 Redis 頻道: %s\n", topic)
+	}
 
 	// 如果該 topic 沒有客戶端了，清理空的 map
 	if len(clients) == 0 {
@@ -221,7 +261,11 @@ func (h *Hub) Publish(ctx context.Context, topic string, v interface{}) error {
 // AddClient 註冊新連線並預設訂閱所有 device:* 頻道
 // 這樣客戶端連接後就能收到所有設備的訊息
 func (h *Hub) AddClient(conn *websocket.Conn) {
-	fmt.Printf("🌐 新的 WebSocket 客戶端已連線\n")
+	if h.log != nil {
+		h.log.Info("websocket client connected")
+	} else {
+		fmt.Printf("🌐 新的 WebSocket 客戶端已連線\n")
+	}
 	// 預設訂閱所有 device:* 頻道，讓客戶端能收到所有設備的訊息
 	h.Subscribe("device:*", conn)
 	// Update metrics
@@ -246,9 +290,17 @@ func (h *Hub) RemoveClient(conn *websocket.Conn) {
 
 	// 關閉連接
 	if err := conn.Close(); err != nil {
-		log.Printf("⚠️ 關閉 WebSocket 連接時發生錯誤: %v", err)
+		if h.log != nil {
+			h.log.Warn("closing websocket connection failed", zap.Error(err))
+		} else {
+			log.Printf("⚠️ 關閉 WebSocket 連接時發生錯誤: %v", err)
+		}
 	}
-	fmt.Printf("🌐 WebSocket 客戶端已斷開，已從所有 topics 中移除\n")
+	if h.log != nil {
+		h.log.Info("websocket client disconnected")
+	} else {
+		fmt.Printf("🌐 WebSocket 客戶端已斷開，已從所有 topics 中移除\n")
+	}
 	// Update metrics
 	ActiveConnections.Dec()
 }
@@ -272,7 +324,11 @@ func (h *Hub) BroadcastToDevice(deviceID uint, v interface{}) {
 		topic = fmt.Sprintf("device:%d", deviceID)
 	}
 	if err := h.Publish(ctx, topic, v); err != nil {
-		log.Printf("❌ Broadcast 失敗 (topic: %s): %v", topic, err)
+		if h.log != nil {
+			h.log.Error("broadcast failed", zap.String("topic", topic), zap.Error(err))
+		} else {
+			log.Printf("❌ Broadcast 失敗 (topic: %s): %v", topic, err)
+		}
 	}
 }
 
@@ -282,7 +338,11 @@ func (h *Hub) BroadcastToDevice(deviceID uint, v interface{}) {
 // 2. 關閉所有 WebSocket 連接（通知客戶端服務器正在關閉）
 // 3. 等待 Redis 監聽器 goroutine 完全退出
 func (h *Hub) Shutdown(ctx context.Context) error {
-	fmt.Println("🔄 正在關閉 WebSocket Hub...")
+	if h.log != nil {
+		h.log.Info("shutting down websocket hub")
+	} else {
+		fmt.Println("🔄 正在關閉 WebSocket Hub...")
+	}
 
 	// 步驟 1：取消 context，觸發 Redis 監聽器停止
 	h.cancel()
@@ -310,6 +370,9 @@ func (h *Hub) Shutdown(ctx context.Context) error {
 		_ = conn.Close()
 	}
 	fmt.Printf("✅ 已關閉 %d 個 WebSocket 連接\n", len(allConns))
+	if h.log != nil {
+		h.log.Info("websocket connections closed", zap.Int("count", len(allConns)))
+	}
 
 	// 步驟 3：等待 Redis 監聽器 goroutine 退出（帶超時保護）
 	done := make(chan struct{})
@@ -321,7 +384,11 @@ func (h *Hub) Shutdown(ctx context.Context) error {
 	select {
 	case <-done:
 		// 所有 goroutine 已完成
-		fmt.Println("✅ Redis 監聽器已安全關閉")
+		if h.log != nil {
+			h.log.Info("redis listener stopped")
+		} else {
+			fmt.Println("✅ Redis 監聽器已安全關閉")
+		}
 		return nil
 	case <-ctx.Done():
 		// 超時了，但 goroutine 可能還在運行
