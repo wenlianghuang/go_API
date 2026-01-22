@@ -37,6 +37,9 @@ type Storage interface {
 
 	// 刪除遙測數據
 	DeleteTelemetry(ctx context.Context, id uint) error
+
+	// 執行一個事務
+	ExecTx(ctx context.Context, fn func(txStorage Storage) error) error
 }
 
 // MemoryStore 是 Storage 的一個實作 (存在記憶體中)
