@@ -40,7 +40,7 @@ func (s *Server) HandleCreateDevice(w http.ResponseWriter, r *http.Request) {
 	// 從 context 中獲取當前登入用戶的 ID（由 AuthMiddleware 注入）
 	userID, ok := GetUserIDFromContext(r.Context())
 	if !ok {
-		errors.HandleError(w, errors.NewUnauthorizedError("User ID not found in context"))
+		errors.HandleError(w, errors.NewUnauthorizedError("User ID not found in context"), s.ErrorLogger)
 		return
 	}
 
@@ -57,7 +57,7 @@ func (s *Server) HandleCreateDevice(w http.ResponseWriter, r *http.Request) {
 		UserID:     userID,
 	}, defaultIsActive)
 	if err != nil {
-		errors.HandleError(w, err)
+		errors.HandleError(w, err, s.ErrorLogger)
 		return
 	}
 
@@ -79,7 +79,7 @@ func (s *Server) HandleCreateDevice(w http.ResponseWriter, r *http.Request) {
 func (s *Server) HandleListDevices(w http.ResponseWriter, r *http.Request) {
 	devices, err := s.Store.ListDevices(r.Context())
 	if err != nil {
-		errors.HandleError(w, errors.NewInternalError("fetch devices", err))
+		errors.HandleError(w, errors.NewInternalError("fetch devices", err), s.ErrorLogger)
 		return
 	}
 	WriteJSON(w, http.StatusOK, devices)
@@ -103,13 +103,13 @@ func (s *Server) HandleGetDevice(w http.ResponseWriter, r *http.Request) {
 	idStr := chi.URLParam(r, "id")
 	id, err := strconv.ParseUint(idStr, 10, 32)
 	if err != nil {
-		errors.HandleError(w, errors.NewInvalidDeviceIDError(idStr))
+		errors.HandleError(w, errors.NewInvalidDeviceIDError(idStr), s.ErrorLogger)
 		return
 	}
 
 	device, err := s.Store.GetDeviceByID(r.Context(), uint(id))
 	if err != nil {
-		errors.HandleError(w, errors.NewDeviceNotFoundError(uint(id)))
+		errors.HandleError(w, errors.NewDeviceNotFoundError(uint(id)), s.ErrorLogger)
 		return
 	}
 	// 2. 🔥 【關鍵步驟】 將 GORM Model 轉換為 DTO
@@ -138,7 +138,7 @@ func (s *Server) HandleUpdateDevice(w http.ResponseWriter, r *http.Request) {
 	idStr := chi.URLParam(r, "id")
 	id, err := strconv.ParseUint(idStr, 10, 32)
 	if err != nil {
-		errors.HandleError(w, errors.NewInvalidDeviceIDError(idStr))
+		errors.HandleError(w, errors.NewInvalidDeviceIDError(idStr), s.ErrorLogger)
 		return
 	}
 
@@ -152,7 +152,7 @@ func (s *Server) HandleUpdateDevice(w http.ResponseWriter, r *http.Request) {
 	// 4. 驗證設備是否存在
 	_, err = s.Store.GetDeviceByID(r.Context(), uint(id))
 	if err != nil {
-		errors.HandleError(w, errors.NewDeviceNotFoundError(uint(id)))
+		errors.HandleError(w, errors.NewDeviceNotFoundError(uint(id)), s.ErrorLogger)
 		return
 	}
 
@@ -166,14 +166,14 @@ func (s *Server) HandleUpdateDevice(w http.ResponseWriter, r *http.Request) {
 
 	// 6. 更新設備
 	if err := s.Store.UpdateDevice(r.Context(), uint(id), device); err != nil {
-		errors.HandleError(w, errors.NewDeviceUpdateFailedError(uint(id), "database operation failed", err))
+		errors.HandleError(w, errors.NewDeviceUpdateFailedError(uint(id), "database operation failed", err), s.ErrorLogger)
 		return
 	}
 
 	// 7. 回傳更新後的設備資訊
 	updatedDevice, err := s.Store.GetDeviceByID(r.Context(), uint(id))
 	if err != nil {
-		errors.HandleError(w, errors.NewInternalError("fetch updated device", err))
+		errors.HandleError(w, errors.NewInternalError("fetch updated device", err), s.ErrorLogger)
 		return
 	}
 
@@ -201,7 +201,7 @@ func (s *Server) HandlePatchDevice(w http.ResponseWriter, r *http.Request) {
 	idStr := chi.URLParam(r, "id")
 	id, err := strconv.ParseUint(idStr, 10, 32)
 	if err != nil {
-		errors.HandleError(w, errors.NewInvalidDeviceIDError(idStr))
+		errors.HandleError(w, errors.NewInvalidDeviceIDError(idStr), s.ErrorLogger)
 		return
 	}
 
@@ -220,7 +220,7 @@ func (s *Server) HandlePatchDevice(w http.ResponseWriter, r *http.Request) {
 		IsActive:   req.IsActive,
 	})
 	if err != nil {
-		errors.HandleError(w, err)
+		errors.HandleError(w, err, s.ErrorLogger)
 		return
 	}
 
@@ -247,14 +247,14 @@ func (s *Server) HandleDeleteDevice(w http.ResponseWriter, r *http.Request) {
 	idStr := chi.URLParam(r, "id")
 	id, err := strconv.ParseUint(idStr, 10, 32)
 	if err != nil {
-		errors.HandleError(w, errors.NewInvalidDeviceIDError(idStr))
+		errors.HandleError(w, errors.NewInvalidDeviceIDError(idStr), s.ErrorLogger)
 		return
 	}
 
 	// 2. 呼叫 Store 執行原子性刪除
 	// 因為我们在介面 (store/db.go) 定義了，所以這裡可以呼叫 s.Store.DeleteDeviceWithAllData
 	if err := s.Store.DeleteDeviceWithAllData(r.Context(), uint(id)); err != nil {
-		errors.HandleError(w, errors.NewDeviceDeleteFailedError(uint(id), "database operation failed", err))
+		errors.HandleError(w, errors.NewDeviceDeleteFailedError(uint(id), "database operation failed", err), s.ErrorLogger)
 		return
 	}
 

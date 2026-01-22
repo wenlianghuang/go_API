@@ -40,7 +40,7 @@ func (s *Server) HandleRegister(w http.ResponseWriter, r *http.Request) {
 		Password: req.Password,
 	})
 	if err != nil {
-		errors.HandleError(w, err)
+		errors.HandleError(w, err, s.ErrorLogger)
 		return
 	}
 
@@ -82,7 +82,7 @@ func (s *Server) HandleLogin(w http.ResponseWriter, r *http.Request) {
 		Password: req.Password,
 	})
 	if err != nil {
-		errors.HandleError(w, err)
+		errors.HandleError(w, err, s.ErrorLogger)
 		return
 	}
 
@@ -112,14 +112,14 @@ func (s *Server) HandleRefreshToken(w http.ResponseWriter, r *http.Request) {
 	// 從 header 中獲取 token
 	authHeader := r.Header.Get("Authorization")
 	if authHeader == "" {
-		errors.HandleError(w, errors.NewUnauthorizedError("Missing Authorization header"))
+		errors.HandleError(w, errors.NewUnauthorizedError("Missing Authorization header"), s.ErrorLogger)
 		return
 	}
 
 	// 解析 Bearer token
 	var tokenString string
 	if _, err := fmt.Sscanf(authHeader, "Bearer %s", &tokenString); err != nil {
-		errors.HandleError(w, errors.NewUnauthorizedError("Invalid token format"))
+		errors.HandleError(w, errors.NewUnauthorizedError("Invalid token format"), s.ErrorLogger)
 		return
 	}
 
@@ -128,7 +128,7 @@ func (s *Server) HandleRefreshToken(w http.ResponseWriter, r *http.Request) {
 		TokenString: tokenString,
 	})
 	if err != nil {
-		errors.HandleError(w, err)
+		errors.HandleError(w, err, s.ErrorLogger)
 		return
 	}
 

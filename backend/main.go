@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"log"
 	"net/http"
 	"os"
@@ -16,9 +15,12 @@ import (
 
 	"my-api/api" // 假設這是你放 Server 的地方
 	"my-api/config"
+	"my-api/logger"
 	"my-api/store" // 資料存取層
 
 	_ "my-api/docs" // swagger docs
+
+	"go.uber.org/zap"
 )
 
 // @title           IoT API
@@ -48,12 +50,21 @@ func main() {
 		log.Fatalf("無法載入配置: %v", err)
 	}
 
+	// 1.1 初始化 structured logger（zap）
+	zlog, err := logger.New(cfg)
+	if err != nil {
+		log.Fatalf("無法初始化 logger: %v", err)
+	}
+	defer func() {
+		_ = zlog.Sync()
+	}()
+
 	// 2. 連接資料庫
 	db, err := gorm.Open(postgres.Open(cfg.Database.DSN), &gorm.Config{})
 	if err != nil {
-		log.Fatalf("無法連接資料庫: %v", err)
+		zlog.Fatal("無法連接資料庫", zap.Error(err))
 	}
-	fmt.Println("✅ 成功連接到 PostgreSQL")
+	zlog.Info("成功連接到 PostgreSQL")
 
 	// 3. 資料庫遷移現在使用 golang-migrate
 	// 請在啟動應用程式前執行：./scripts/docker-migrate.sh up
@@ -69,11 +80,11 @@ func main() {
 	// 5. 初始化 Store (使用 GormStore)
 	gormStore, err := store.NewGormStore(db)
 	if err != nil {
-		log.Fatalf("無法初始化 GormStore: %v", err)
+		zlog.Fatal("無法初始化 GormStore", zap.Error(err))
 	}
 
 	// 6. 初始化 Server (注入配置)
-	srv := api.NewServer(gormStore, cfg)
+	srv := api.NewServer(gormStore, cfg, zlog)
 
 	// 8. 創建組合的 HTTP handler，將 WebSocket 和 API 路由組合
 	// 使用自定義的 handler 來確保 WebSocket 路由優先處理
@@ -119,25 +130,25 @@ func main() {
 	// API Server - 處理所有業務請求（包含 WebSocket）
 	go func() {
 		defer wg.Done()
-		fmt.Printf("🚀 API Server running on :%s\n", cfg.App.APIPort)
+		zlog.Info("API server listening", zap.String("addr", ":"+cfg.App.APIPort))
 		if err := apiServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			log.Fatalf("API Server failed: %v", err)
+			zlog.Fatal("API server failed", zap.Error(err))
 		}
 	}()
 
 	// Metrics Server - 只處理 Prometheus metrics 請求
 	go func() {
 		defer wg.Done()
-		fmt.Printf("📊 Metrics Server running on :%s/metrics\n", cfg.App.MetricsPort)
+		zlog.Info("metrics server listening", zap.String("addr", ":"+cfg.App.MetricsPort), zap.String("path", "/metrics"))
 		if err := metricsServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			log.Fatalf("Metrics Server failed: %v", err)
+			zlog.Fatal("metrics server failed", zap.Error(err))
 		}
 	}()
 
 	// 10. 阻塞等待系統信號
 	sig := <-quit
-	fmt.Printf("\n🛑 收到停機信號: %v\n", sig)
-	fmt.Println("⏳ 開始優雅停機流程...")
+	zlog.Info("received shutdown signal", zap.String("signal", sig.String()))
+	zlog.Info("starting graceful shutdown")
 
 	// 11. 創建帶超時的 context（給予 30 秒完成停機）
 	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 30*time.Second)
@@ -150,13 +161,13 @@ func main() {
 	// 關閉 API Server（包含背景任務）
 	go func() {
 		defer shutdownWg.Done()
-		fmt.Println("🔄 正在關閉 API Server...")
+		zlog.Info("shutting down api server")
 
 		// 🆕 步驟 1：先關閉 HTTP Server（停止接受新請求）
 		if err := apiServer.Shutdown(shutdownCtx); err != nil {
-			log.Printf("❌ HTTP Server 停機失敗: %v", err)
+			zlog.Error("http server shutdown failed", zap.Error(err))
 		} else {
-			fmt.Println("✅ HTTP Server 已安全關閉")
+			zlog.Info("http server shut down")
 		}
 
 		// 🆕 步驟 2：再關閉 Server 的背景任務（Worker + WebSocket Hub）
@@ -166,18 +177,18 @@ func main() {
 		// - Redis 監聽器
 		// - Redis 連接
 		if err := srv.Shutdown(shutdownCtx); err != nil {
-			log.Printf("❌ Server 背景任務停機失敗: %v", err)
+			zlog.Error("server background shutdown failed", zap.Error(err))
 		}
 	}()
 
 	// 關閉 Metrics Server
 	go func() {
 		defer shutdownWg.Done()
-		fmt.Println("🔄 正在關閉 Metrics Server...")
+		zlog.Info("shutting down metrics server")
 		if err := metricsServer.Shutdown(shutdownCtx); err != nil {
-			log.Printf("❌ Metrics Server 停機失敗: %v", err)
+			zlog.Error("metrics server shutdown failed", zap.Error(err))
 		} else {
-			fmt.Println("✅ Metrics Server 已安全關閉")
+			zlog.Info("metrics server shut down")
 		}
 	}()
 
@@ -185,12 +196,12 @@ func main() {
 	shutdownWg.Wait()
 
 	// 13. 關閉資料庫連線
-	fmt.Println("🔄 正在關閉資料庫連線...")
+	zlog.Info("closing database connection")
 	if err := sqlDB.Close(); err != nil {
-		log.Printf("❌ 資料庫關閉失敗: %v", err)
+		zlog.Error("database close failed", zap.Error(err))
 	} else {
-		fmt.Println("✅ 資料庫連線已關閉")
+		zlog.Info("database connection closed")
 	}
 
-	fmt.Println("👋 程式已完全停止")
+	zlog.Info("shutdown complete")
 }

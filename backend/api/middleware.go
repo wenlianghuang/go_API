@@ -7,6 +7,8 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	chimiddleware "github.com/go-chi/chi/v5/middleware"
+	"go.uber.org/zap"
 )
 
 // 1. 定義私有的 Key 型別，防止外部套件衝突
@@ -115,6 +117,64 @@ func MetricsMiddleware(next http.Handler) http.Handler {
 	})
 }
 
+// ZapHTTPLogger logs one line per HTTP request using zap.
+//
+// Notes:
+// - WebSocket requests are handled in main.go and bypass chi middleware.
+// - This middleware uses chi's RequestID middleware (if enabled) to attach request_id.
+func ZapHTTPLogger(log *zap.Logger) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			start := time.Now()
+
+			ww := &statusCapturingResponseWriter{ResponseWriter: w, statusCode: http.StatusOK}
+			next.ServeHTTP(ww, r)
+
+			routePattern := chi.RouteContext(r.Context()).RoutePattern()
+			if routePattern == "" {
+				routePattern = r.URL.Path
+			}
+
+			fields := []zap.Field{
+				zap.String("method", r.Method),
+				zap.String("route", routePattern),
+				zap.String("path", r.URL.Path),
+				zap.Int("status", ww.statusCode),
+				zap.Duration("duration", time.Since(start)),
+			}
+
+			if reqID := chimiddleware.GetReqID(r.Context()); reqID != "" {
+				fields = append(fields, zap.String("request_id", reqID))
+			}
+
+			// Best-effort client IP
+			if ip := r.Header.Get("X-Forwarded-For"); ip != "" {
+				fields = append(fields, zap.String("x_forwarded_for", ip))
+			} else if ip := r.Header.Get("X-Real-IP"); ip != "" {
+				fields = append(fields, zap.String("x_real_ip", ip))
+			} else if r.RemoteAddr != "" {
+				// RemoteAddr is "IP:port"
+				fields = append(fields, zap.String("remote_addr", r.RemoteAddr))
+			}
+
+			// If response size is known, include it (Write() tracked)
+			if ww.bytesWritten > 0 {
+				fields = append(fields, zap.Int64("bytes", ww.bytesWritten))
+			}
+
+			// Log level by status code
+			switch {
+			case ww.statusCode >= 500:
+				log.Error("http request completed", fields...)
+			case ww.statusCode >= 400:
+				log.Warn("http request completed", fields...)
+			default:
+				log.Info("http request completed", fields...)
+			}
+		})
+	}
+}
+
 // responseWriter wraps http.ResponseWriter to capture status code
 type responseWriter struct {
 	http.ResponseWriter
@@ -125,3 +185,30 @@ func (rw *responseWriter) WriteHeader(code int) {
 	rw.statusCode = code
 	rw.ResponseWriter.WriteHeader(code)
 }
+
+type statusCapturingResponseWriter struct {
+	http.ResponseWriter
+	statusCode    int
+	bytesWritten  int64
+	headerWritten bool
+}
+
+func (w *statusCapturingResponseWriter) WriteHeader(code int) {
+	w.statusCode = code
+	w.headerWritten = true
+	w.ResponseWriter.WriteHeader(code)
+}
+
+func (w *statusCapturingResponseWriter) Write(p []byte) (int, error) {
+	if !w.headerWritten {
+		w.WriteHeader(http.StatusOK)
+	}
+	n, err := w.ResponseWriter.Write(p)
+	w.bytesWritten += int64(n)
+	return n, err
+}
+
+// Optional: if the underlying ResponseWriter supports Hijacker (websocket), preserve it.
+// (Chi middlewares can break Hijacker support if they wrap ResponseWriter incorrectly.)
+// This wrapper preserves Hijacker only by embedding; if needed, implement explicit Hijack forwarding.
+var _ http.ResponseWriter = (*statusCapturingResponseWriter)(nil)

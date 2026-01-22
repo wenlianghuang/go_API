@@ -6,6 +6,7 @@ import (
 	"net/http"
 
 	"github.com/gorilla/websocket"
+	"go.uber.org/zap"
 )
 
 // ==========================================
@@ -23,7 +24,11 @@ func (s *Server) HandleWS(w http.ResponseWriter, r *http.Request) {
 
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
-		fmt.Printf("❌ WS 升級失敗: %v\n", err)
+		if s.Logger != nil {
+			s.Logger.Error("websocket upgrade failed", zap.Error(err))
+		} else {
+			fmt.Printf("❌ WS 升級失敗: %v\n", err)
+		}
 		return
 	}
 
