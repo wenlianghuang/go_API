@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"my-api/config"
 	"my-api/model"
+	"my-api/store"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -103,6 +104,16 @@ func (m *MockStore) PatchTelemetry(ctx context.Context, id uint, updates map[str
 
 func (m *MockStore) DeleteTelemetry(ctx context.Context, id uint) error {
 	args := m.Called(ctx, id)
+	return args.Error(0)
+}
+
+// ExecTx 執行一個事務
+func (m *MockStore) ExecTx(ctx context.Context, fn func(txStorage store.Storage) error) error {
+	args := m.Called(ctx, fn)
+	if args.Get(0) == nil {
+		// 如果沒有設置返回值，直接執行函數（用於簡單的測試場景）
+		return fn(m)
+	}
 	return args.Error(0)
 }
 
