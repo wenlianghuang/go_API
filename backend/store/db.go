@@ -245,3 +245,13 @@ func (s *MemoryStore) DeleteTelemetry(ctx context.Context, id uint) error {
 	delete(s.telemetries, id)
 	return nil
 }
+
+// ExecTx 執行一個事務（簡化版實作，用於測試）
+// 注意：MemoryStore 無法真正 rollback，但可以模擬 transaction 的行為
+// 如果 fn 返回錯誤，我們會直接返回該錯誤，模擬 rollback 的效果
+func (s *MemoryStore) ExecTx(ctx context.Context, fn func(txStorage Storage) error) error {
+	// 在 MemoryStore 中，我們直接將自己作為 txStorage 傳入
+	// 因為 MemoryStore 的操作是立即生效的，所以如果 fn 返回錯誤，
+	// 我們無法真正 rollback，但這對於測試 transaction 邏輯已經足夠
+	return fn(s)
+}
