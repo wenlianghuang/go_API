@@ -12,6 +12,7 @@ import (
 	"my-api/api"
 	"my-api/config"
 	"my-api/model"
+	"my-api/store"
 )
 
 // 1. 定義一個 MockStore
@@ -83,6 +84,14 @@ func (m *MockStore) DeleteTelemetry(ctx context.Context, id uint) error {
 		return errors.New("mock delete error")
 	}
 	return nil
+}
+
+// ExecTx 執行一個事務
+func (m *MockStore) ExecTx(ctx context.Context, fn func(txStorage store.Storage) error) error {
+	if m.ShouldError {
+		return errors.New("mock transaction error")
+	}
+	return fn(m)
 }
 
 // createTestConfig 創建測試用的配置

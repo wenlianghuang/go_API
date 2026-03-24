@@ -48,8 +48,8 @@ func (s *Server) HandleCreateDevice(w http.ResponseWriter, r *http.Request) {
 	// 如果 URL query 參數中沒有 "is_active" 且請求體中的 IsActive 是 false，則使用預設值 true
 	defaultIsActive := !r.URL.Query().Has("is_active") && !req.IsActive
 
-	// 調用 service 執行業務邏輯
-	result, err := s.DeviceService.CreateDevice(r.Context(), service.CreateDeviceInput{
+	// 調用 service 執行業務邏輯（使用 CreateDeviceWithInitLog 會同時創建設備和初始 telemetry）
+	result, err := s.DeviceService.CreateDeviceWithInitLog(r.Context(), service.CreateDeviceInput{
 		Name:       req.Name,
 		Type:       req.Type,
 		MacAddress: req.MacAddress,

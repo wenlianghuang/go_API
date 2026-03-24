@@ -217,3 +217,14 @@ func (s *GormStore) DeleteTelemetry(ctx context.Context, id uint) error {
 	}
 	return nil
 }
+
+// ExceTx 執行一個事務
+func (s *GormStore) ExecTx(ctx context.Context, fn func(txStorage Storage) error) error {
+	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		txStorage, err := NewGormStore(tx)
+		if err != nil {
+			return err
+		}
+		return fn(txStorage)
+	})
+}
